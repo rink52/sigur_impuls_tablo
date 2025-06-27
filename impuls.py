@@ -3,6 +3,7 @@ import struct
 import time
 import decode_packet
 import logging
+import socket
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +30,12 @@ CrcTable = [
 ]
 
 # Определяем коды ошибок ответов от табло
-code_error = {0: "define_ecOK",           # нет ошибок
-              1: "define_ecBadCommand",   # несуществующая команда
-              2: "define_ecParamError",   # неверные параметры команды
+code_error = {0: "define_ecOK",  # нет ошибок
+              1: "define_ecBadCommand",  # несуществующая команда
+              2: "define_ecParamError",  # неверные параметры команды
               3: "define_ecExecuteError"  # невозможно выполнить команду
               }
+
 
 # Функция для расчета контрольной суммы (CS)
 def calculate_checksum(data):
@@ -46,17 +48,18 @@ def calculate_checksum(data):
     cshi = cs2 & 0x3F  # cshi (старшие) должен быть 6-битным
     return cslo, cshi
 
+
 def CS2word(cslo, cshi):
     """ Функция кодирования контрольной суммы для вставки в пакет, а также длины пакета"""
     return (0x8080 | cslo | (((cslo << 1) & 0x100)) | (cshi << 9))
 
 
-def encode_data_for_twopack(src_data):
+def encode_data_for_decoded_pack(src_data):
     """ Функция кодирования данных для передачи """
     encoded_data = bytearray()
     for byte in src_data:
-        b = byte ^ 0x80                     # инвертируем старший бит
-        if b < 0x20 or b == 0x7F:           # проверям условие соответствия
+        b = byte ^ 0x80  # инвертируем старший бит
+        if b < 0x20 or b == 0x7F:  # проверям условие соответствия
             encoded_data.append(0x7F)
             encoded_data.append(b | 0x80)
         else:
@@ -64,7 +67,7 @@ def encode_data_for_twopack(src_data):
     return encoded_data
 
 
-def make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, data_len, data):
+def make_full_packet(src_addr: int, dst_addr: int, pid: int, cmd: int, flags: int, status: int, data_len: int, data):
     """ Функция для формирования полного пакета """
     # Структура заголовка
     header = struct.pack('<HHBBBBH', src_addr, dst_addr, pid, cmd, flags, status, data_len)
@@ -73,19 +76,20 @@ def make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, data_len, data
         full_data = header
     else:
         full_data = header + data
-    cslo, cshi = calculate_checksum(full_data)      # Подсчет младшых и старших байт для контрольной суммы
-    checksum = CS2word(cslo, cshi)                  # Контрольная сумма
-    packet_len = len(full_data)                     # Длина пакета
-    lo_len = packet_len & 0xFF                      # младшие байты длины
-    hi_len = (packet_len >> 8) & 0xFF               # старшие байты длины
+    cslo, cshi = calculate_checksum(full_data)  # Подсчет младших и старших байт для контрольной суммы
+    checksum = CS2word(cslo, cshi)  # Контрольная сумма
+    packet_len = len(full_data)  # Длина пакета
+    lo_len = packet_len & 0xFF  # младшие байты длины
+    hi_len = (packet_len >> 8) & 0xFF  # старшие байты длины
     # Создаем и заполняем структуру полного пакета
     full_packet = bytearray()
     full_packet.append(0x02)  # Start byte
     full_packet.extend(struct.pack('<H', CS2word(lo_len, hi_len)))
-    full_packet.extend(encode_data_for_twopack(full_data))
+    full_packet.extend(encode_data_for_decoded_pack(full_data))
     full_packet.extend(struct.pack('<H', checksum))
     full_packet.append(0x03)  # End byte
     return full_packet
+
 
 # def send_packet_udp(socket, ip, port, packet):
 #     """ Функция отправки пакета по IP (UDP) """
@@ -118,63 +122,98 @@ def decode_upper_level_packet(packet):
     return None
 
 
+def parse_packet(decoded_pack):
+    # print(decoded_pack.hex())
+    src_addr = int.from_bytes(decoded_pack[:2], byteorder="little")
+    # print(f"src_addr: {src_addr:04}")
+    dst_addr = int.from_bytes(decoded_pack[2:4], byteorder="little")
+    # print(f"dst_addr: {dst_addr:04}")
+    pid = decoded_pack[4]
+    # print(f"pid: 0x{pid:02x}")
+    cmd = decoded_pack[5]
+    # print(f"cmd: 0x{cmd:02x}")
+    flags = decoded_pack[6]
+    # print(f"flags: 0x{flags:02x}")
+    status = decoded_pack[7]
+    # print(f"status: 0x{status:02x}")
+    data = None
+    if cmd != 1 and cmd != 4:
+        DataLen = int.from_bytes(decoded_pack[8:10], byteorder="little")
+        print(f"DataLen: 0x{DataLen:04x}")
+        data = int.from_bytes(decoded_pack[10:], byteorder="big")
+        print(f"data: {hex(data)}")
+    print(f"packet: pid: {pid}, cmd: {cmd}, flags: {flags}, status: {status}, data: {data}")
+    return pid, cmd, flags, status, data
+
+
+def check_incoming_packet(socket=None, sended_packets=None):
+    encoded_pack, clientaddress = socket.recvfrom(buffer_size)
+    decoded_pack = decode_packet.decode_upper_level_packet(encoded_pack)
+    result = decode_packet.parse_packet(decoded_pack)
+    if sended_packets is not None:
+        if sended_packets.get(result[0]) and sended_packets.get(result[3]) == 0:
+            sended_packets.remove(result[0])
+    return result
+
+
+    #______________________________________________
+    #___Обработка пактов в зависимости от задачи___
+
 def test_connection(socket, conf):
     """Тест связи с табло"""
     try:
         while True:
             logger.debug(f"Проверка связи с табло. IP: {conf['IPDst']} Port: {conf['PortDst']}")
-
             src_addr = 0x0000
-            dst_addr = conf["DstAddr"]
-            pid = 0x01
+            dst_addr = conf.get("DstAddr", 1)
+            pid = 0
             cmd = 0x01
-            flags = 0x02    # игнорируем pid
+            flags = 0x02  # игнорируем pid
             status = 0x80
             DataLen = 0
             data = None
             packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
-            socket.sendto(packet, (conf["IPDst"], conf["PortDst"]))
+            socket.sendto(packet, (conf.get("IPDst"), conf.get("PortDst")))
 
             for _ in range(10):
                 try:
-                    up_pack, clientaddress = socket.recvfrom(buffer_size)
-                    twopack = decode_packet.decode_upper_level_packet(up_pack)
-                    result = decode_packet.parse_packet(twopack)
-                    # print("response", result)
+                    result = check_incoming_packet(socket=socket)
+                    print("response", result)
                     if result[1] == 1 and result[3] == 0:
                         logger.debug("Соединение с табло активно")
                         print("Соединение с табло активно")
                         return
                 except BlockingIOError:
-                    # если в сокете пакетов нет то игнорируем
                     time.sleep(0.5)
-                    continue
+                    continue  # если в буфере пакетов нет, то игнорируем
+
             logger.error(f"Нет ответа от табло")
             time.sleep(5)
 
     except ConnectionResetError:
-        logger.error(f"Удаленный хост {conf['IPDst']}:{conf['PortDst']} принудительно разорвал существующее подключение. Проверьте корректность указанных данных для подключения")
+        logger.error(
+            f"Удаленный хост {conf['IPDst']}:{conf['PortDst']} принудительно разорвал существующее подключение. Проверьте корректность указанных данных для подключения")
         time.sleep(5)
         test_connection(socket, conf)
 
+
 def set_bright(socket, conf):
     """Установка яркости"""
+
     src_addr = 0x0000
-    dst_addr = conf["DstAddr"]
-    pid = 0x01
+    dst_addr = conf.get("DstAddr")
+    pid = 0
     cmd = 0x02
-    flags = 0x02 # игнорируем pid
+    flags = 0x02  # игнорируем pid
     status = 0x80
     DataLen = 1
-    data = struct.pack('B', conf["Brightness"])
+    data = struct.pack('B', conf.get("Brightness", 5))
     packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
-    socket.sendto(packet, (conf["IPDst"], conf["PortDst"]))
+    socket.sendto(packet, (conf.get("IPDst"), conf.get("PortDst")))
 
     for _ in range(10):
         try:
-            up_pack, clientaddress = socket.recvfrom(buffer_size)
-            twopack = decode_packet.decode_upper_level_packet(up_pack)
-            result = decode_packet.parse_packet(twopack)
+            result = check_incoming_packet(socket=socket)
             if result[1] == 2:
                 if result[3] == 0:
                     logger.debug("Ярксть настроена корректно")
@@ -195,22 +234,21 @@ def set_bright(socket, conf):
 
 def time_set(socket, conf):
     """Установка времени на табло"""
+
     src_addr = 0x0000
-    dst_addr = conf["DstAddr"]
-    pid = 0x01
+    dst_addr = conf.get("DstAddr")
+    pid = 0
     cmd = 0x03
-    flags = 0x02    # игнорируем pid
+    flags = 0x02  # игнорируем pid
     status = 0x80
     DataLen = 6
     date = datetime.datetime.now().strftime("%S-%M-%H-%d-%m-%y").split("-")
     data = struct.pack('<BBBBBB', int(date[0]), int(date[1]), int(date[2]), int(date[3]), int(date[4]), int(date[5]))
     packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
-    socket.sendto(packet, (conf["IPDst"], conf["PortDst"]))
+    socket.sendto(packet, (conf.get("IPDst"), conf.get("PortDst")))
     for _ in range(10):
         try:
-            up_pack, clientaddress = socket.recvfrom(buffer_size)
-            twopack = decode_packet.decode_upper_level_packet(up_pack)
-            result = decode_packet.parse_packet(twopack)
+            result = check_incoming_packet(socket=socket)
             if result[1] == 3:
                 if result[3] == 0:
                     logger.debug("Время настроено корректно")
@@ -229,16 +267,6 @@ def time_set(socket, conf):
     print("Не удалось настроить время.")
 
 
-# # Пример использования: отправка пакета с установкой времени
-# src_addr = 0x0000
-# dst_addr = 0x0001
-# pid = 0x0f
-# cmd = 0x03
-# flags = 0x00
-# status = 0x80
-# DataLen = 6
-# data = struct.pack('BBBBBB', 3, 55, 14, 27, 8, 24)  # Установить время
-
 # # Пример использования: отправка пакета с выводом текста а123нн199 в 0 сегмент
 # text = 'а123нн199'
 # src_addr = 0x0000
@@ -254,34 +282,54 @@ def time_set(socket, conf):
 # data = param+data
 
 
-# # # Пример использования: отправка пакета с выводом текста а123нн199 в 0 текстовую зону дисплея
-# text = 'а123нн199'
-# src_addr = 0
-# dst_addr = 127
-# pid = 254
-# cmd = 0x05
-# flags = 0x00
-# status = 0x80
-# type_disp = 0x02
-# num_disp = 0
-# disp = (type_disp << 6) | num_disp
-# encoded_text = text.encode('cp1251')
-# DataLen = len(text) + 9
-# param = struct.pack('<BBBBBBBBB', disp, 5, 0, 0, 0, 1, 0, 0, 0)
-# data = struct.pack('<'+'B'*len(text), *encoded_text)
-# data = param+data
+def send_data_for_table_0x05(socket, conf, sended_packets, pid, text, num_disp):
+    """Отправка информации в текстовые поля табло (0x05)"""
 
-# Считывание данных (семисегментные индикаторы) по строкам и столбцам
-# src_addr = 0x0000
-# dst_addr = 0x0001
-# pid = 0x0f
-# cmd = 0x10
-# flags = 0x00
-# status = 0x80
-# DataLen = 4
-# param = struct.pack('<BBBB', 0, 0, 0, 0)
-# data = param
+    # # Пример использования: отправка пакета с выводом текста а123нн199 в 0 текстовую зону дисплея
+    text = 'а123нн199'
+    src_addr = 0
+    dst_addr = conf.get("DstAddr")
+    # pid = 254
+    cmd = 0x05
+    flags = 0x00
+    status = 0x80
+    type_disp = 0x01
+    disp = (type_disp << 6) | num_disp
+    number_font = conf.get("NumberFont", 0)
+    alignment = conf.get("AlignText", 0)
 
+    encoded_text = text.encode('cp1251')
+    color = conf.get("ColorText", 1)
+    if num_disp in (0, 1):
+        color = conf.get("FirstStringColorText", 2)
+    DataLen = len(text) + 9
+    param = struct.pack('<BBBBBBBBB', disp, 5, 0, 0, 0, 1, 0, 0, 0)
+    data = struct.pack('<' + 'B' * len(text), *encoded_text)
+    data = param + data
+    packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
+    socket.sendto(packet, (conf.get("IPDst"), conf.get("PortDst")))
+    sended_packets[pid] = packet
+
+
+
+
+
+if __name__ == "__main__":
+    print(__name__)
+    try:
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        server_socket.bind(('0.0.0.0', 0))
+        server_socket.setblocking(False)  # Неблокирующий режим
+        test_connection(server_socket, {"DstAddr": 1,
+                                        "IPDst": "127.0.0.1",
+                                        "PortDst": 5000
+                                        })
+
+    except (OSError, OverflowError):
+        # Если порт занят, то проверяем кем
+        errors_server.find_process_using_port(conf['ServicePort'])
+    finally:
+        server_socket.close()
 
 # # Сформировать пакет
 # packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
@@ -293,27 +341,3 @@ def time_set(socket, conf):
 # while True:
 #     time.sleep(1)
 #     send_packet_udp(ip, port, packet)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -83,11 +83,12 @@ def check_cfg(conf):
              "Period": ["int"],
              "NumberRows": ["int"],
              "TwoSegmentString": ["int"],
-             "AlignText": ["int"],
              "TimeSync": ["int"],
              "Brightness": ["int"],
              "ColorText": ["int"],
              "FirstStringColorText": ["int"],
+             "NumberFont": ["int"],
+             "AlignText": ["int"],
              "UseMemory": ["int"],
              "FlashNew": ["int"],
              "ParamNum": ["int"],
@@ -142,8 +143,6 @@ def create_config():
     NumberRows=8
     # Строка табло разделена на 2 сегмента (0 - нет, 1 - да)
     TwoSegmentString=1
-    # Выравнивание текста (0 -влево, 1- вправо, 2 — по центру)
-    AlignText=0
     # Синхронизация времени (0 — НЕ требуется, 1 — требуется)
     TimeSync=0
     # Яркость табло (от 1 до 10, где 1 не ярко, 10 очень ярко)
@@ -152,6 +151,10 @@ def create_config():
     ColorText=1
     # Цвет отображаемого текста в 1 строке (1- красный, 2 — зеленый, 3 — синий)
     FirstStringColorText=1
+    # Номер шрифта
+    NumberFont=0
+    # Выравнивание текста (0 -влево, 1- вправо, 2 — по центру)
+    AlignText=0
     # Сохранять ли отображаемые данные в энергонезависимой памяти (0 — нет, 1 — да).
     UseMemory=1
     # Требуется ли эффект мигания новой информациией на табло в течении 10 секунд после наступления периода синхронизации (0 — нет, 1 — да).
