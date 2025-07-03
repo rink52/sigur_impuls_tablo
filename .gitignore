@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+*.so
+.Python
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environments
+venv/
+env/
+doc/
+*.env
+.env/
+
+# Logs
+*.log
+logs/
+
+# Project-specific
+emul/
+safe/
+test/
+
+# Other
+.gitignore
+server.bat
+server.py
+tablo.py
+decode_packet.py
