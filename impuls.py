@@ -285,16 +285,12 @@ def time_set(socket, conf):
 # data = param+data
 
 
-def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int, text: str, num_disp: int):
-    """Отправка информации в текстовые поля табло (0x05)"""
-
-    #_______
-    # text = 'а123нн199'
-    # pid = 254
-    print(text)
-    #_______
-
-    # # Пример использования: отправка пакета с выводом текста а123нн199 в 0 текстовую зону дисплея
+def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int, text: str, position: str,  num_disp: int):
+    """Отправка информации в текстовые поля табло (0x05)
+    Определение номера текстового поля осуществляется в соответствии с его строкой
+    без разделения на сегменты "НомерТС и Ворота".
+    Вывод текста происходит единой строкой в оба поля через пробелы из расчета 13 символов в строке.
+    В случае если нужно вывести номер А111АА111 в позиции 03, то нужно добавить 2 пробела 'A111AA111  03' """
     src_addr = 0
     dst_addr = conf.get("DstAddr")
     cmd = 0x05
@@ -303,16 +299,16 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
     disp = (type_disp << 6) | num_disp
     number_font = conf.get("NumberFont", 0)
     alignment = conf.get("AlignText", 0)
-    flags = 0x00
-    if conf.get("UseMemory") == 1:
-        flags = 0x80
+    flags = 0x80 if conf.get("UseMemory") == 1 else flags = 0x00
     color = conf.get("ColorText", 1)
+    position = position.zfill(2)
+    text = text + " "*(11-len(text)) + position
     encoded_text = text.encode('cp1251')
-    if num_disp in (0, 1):
+    if num_disp == 0:
         color = conf.get("FirstStringColorText", 2)
+    print("-"*71, f"\n display_number: {num_disp} | lpr_number: '{text}' | Color text: {color}\n","-"*70)
     DataLen = len(text) + 9
     param = struct.pack('<BBBBBBBBB', disp, number_font, alignment, flags, 0, color, 0, 0, 0)
-    print(encoded_text)
     data = struct.pack('<' + 'B' * len(text), *encoded_text)
     data = param + data
     packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)

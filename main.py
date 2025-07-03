@@ -95,8 +95,11 @@ try:
             elif int(key_queue) > conf['NumberRows']:
                 logger.info(f"Позиция в очереди для номера {value_queue} ровна {key_queue}, что больше чем указано в 'NumberRows'. Игнорируем.")
                 continue
-            elif value_queue == queue_sended.get(key_queue):
-                pre_queue_sending[key_queue] = "NULL"
+            elif int(key_queue) < 1:
+                logger.info(f"Позиция в очереди для номера {value_queue} ровна {key_queue}, что меньше 1. Игнорируем.")
+                continue
+            elif value_queue == queue_sended.get(str(int(key_queue))):
+                pre_queue_sending[int(key_queue)] = "NULL"
                 continue
             else:
                 # иначе добавляем в очередь отправки
@@ -106,7 +109,7 @@ try:
 
         # теперь у нас есть предварительная очередь отправки pre_queue_sending, добавим пустые строки и сформируем готовую очередь отправки
 
-        """НУЖНО ДОБАВИТЬ УСЛОВАИЕ ПРОВЕРКИ ОТСУТСТВИЯ НЕ ДОСТАВЛЕННЫХ ПАКЕТОВ
+        """НУЖНО ДОБАВИТЬ УСЛОВИЕ ПРОВЕРКИ ОТСУТСТВИЯ НЕ ДОСТАВЛЕННЫХ ПАКЕТОВ
         ЕСЛИ ЕСТЬ ТАКИЕ ПАКЕТЫ, ТО ДОБАВИТЬ СВЕРИТЬ НОМЕРА ИЗ ПРОШЛОЙ ИТЕРАЦИИ И НОВОЙ 
         И ЕСЛИ В ПОЗИЦИИ НОМРА ОДИНАКОЫВЫЕ ТО ДОБАВИТЬ В ОЧЕРЕДЬ ЕЩЕ РАЗ"""
         if len(sended_packets) > 0:
@@ -148,9 +151,9 @@ try:
             last_pid += 1
             if 1 > int(position) >= conf.get('NumberRows'):
                 continue
-            display_obj = [None, 0, 2, 4, 6, 8, 10, 12, 14]
+            display_obj = [None, 0, 1, 2, 3, 4, 5, 6, 7]
             if conf.get('Command', "0x05") == "0x05":
-                impuls.send_data_for_table_0x05(server_socket, conf, sended_packets, last_pid, obj, display_obj[position])
+                impuls.send_data_for_table_0x05(server_socket, conf, sended_packets, last_pid, obj, str(position), display_obj[position])
                 time.sleep(0.01)
                 print(position, obj)
             print("sended_packets main:", sended_packets)
@@ -196,21 +199,21 @@ try:
 
 
 
-    # ____
     # Устанавливаем порядковые номера очереди на табло
-    # number_queue = 0
-    # print("sended_packets:", sended_packets)
-    # for number_display in range(1, conf['NumberRows']*2+1, 2):
-    #     number_queue += 1
-    #     print(f"number_disp: {number_display} - number_queue: {number_queue}")
-    #     if last_pid == 255:
-    #         last_pid = 0
-    #     last_pid += 1
-    #     impuls.send_data_for_table_0x05(server_socket, conf, sended_packets, last_pid, str(number_queue), number_display)
-    #     time.sleep(0.1)
-    # # while True:
-    # #     server_socket.recvfrom(impuls.buffer_size)
-    # print("sended_packets:", sended_packets)
+    for number_display in range(conf['NumberRows']):
+        if last_pid == 255:
+            last_pid = 0
+        last_pid += 1
+        text = " "
+        position = str(number_display + 1)
+        impuls.send_data_for_table_0x05(server_socket, conf, sended_packets, last_pid, text, position, number_display)
+        time.sleep(0.1)
+    # while True:
+    #     server_socket.recvfrom(impuls.buffer_size)
+    print("sended_packets:", sended_packets)
+    input("stop...")
+    # _________________________________________
+
 
 
     # превентивно запускаем main() для формирования первичной очереди
