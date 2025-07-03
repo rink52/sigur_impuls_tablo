@@ -21,6 +21,8 @@ library_files = ('parsing_cfg.py',
                  'script.py',
                  'errors_server.py')
 
+server_socket = None
+
 if not all(path.exists(name) for name in library_files):
     print("Отсутствуют необходимые файлы интеграции")
     exit(1)
@@ -117,7 +119,7 @@ try:
             if pre_queue_sending.get(index):
                 queue_sending[index] = pre_queue_sending.get(index)
             else:
-                queue_sending[index] = ""
+                queue_sending[index] = " "
 
         # обработаем очередь ранее отправленных и удалим элементы которые не сохранили позицию.
         # Это нужно для следующей итерации
@@ -163,7 +165,6 @@ try:
 
 
 
-
     # Открываем сокет
     try:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -175,9 +176,12 @@ try:
         errors_server.find_process_using_port(conf['ServicePort'])
         exit(1)
 
+    #____________________________________________
     # while True:
     #     impuls.send_data_for_table(server_socket, conf)
     #     input("далее?")
+    #_____________________________________________
+
 
     # первичная настройка табло
         # проверка связи с табло
@@ -187,22 +191,26 @@ try:
     # impuls.set_bright(server_socket, conf)
     #     # настраиваем время
     # if conf.get('TimeSync', 0) == 1:
-    #     impuls.time_set(server_socket, conf)
+    # impuls.time_set(server_socket, conf)
     #     pass
-    # Уснатавливаем порядковые номера очереди на табло
-    number_queue = 0
-    print("sended_packets:", sended_packets)
-    for number_display in range(1, conf['NumberRows']*2+1, 2):
-        number_queue += 1
-        print(f"number_disp: {number_display} - number_queue: {number_queue}")
-        if last_pid == 255:
-            last_pid = 0
-        last_pid += 1
-        impuls.send_data_for_table_0x05(server_socket, conf, sended_packets, last_pid, number_queue, number_display)
-        time.sleep(0.1)
-    # while True:
-    #     server_socket.recvfrom(impuls.buffer_size)
-    print("sended_packets:", sended_packets)
+
+
+
+    # ____
+    # Устанавливаем порядковые номера очереди на табло
+    # number_queue = 0
+    # print("sended_packets:", sended_packets)
+    # for number_display in range(1, conf['NumberRows']*2+1, 2):
+    #     number_queue += 1
+    #     print(f"number_disp: {number_display} - number_queue: {number_queue}")
+    #     if last_pid == 255:
+    #         last_pid = 0
+    #     last_pid += 1
+    #     impuls.send_data_for_table_0x05(server_socket, conf, sended_packets, last_pid, str(number_queue), number_display)
+    #     time.sleep(0.1)
+    # # while True:
+    # #     server_socket.recvfrom(impuls.buffer_size)
+    # print("sended_packets:", sended_packets)
 
 
     # превентивно запускаем main() для формирования первичной очереди
@@ -232,5 +240,6 @@ except OSError as e:
     logger.error(e)
 
 finally:
-    server_socket.close()
+    if server_socket:
+        server_socket.close()
     logger.info("Сервис остановлен")

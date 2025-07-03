@@ -104,9 +104,9 @@ def decode_upper_level_packet(packet):
         len_lo = packet[1:2]
         len_hi = packet[2:3]
         checksum = packet[-3:-1]
-        print(len_lo, len_hi, checksum)
+        # print(len_lo, len_hi, checksum)
         packet = packet[3:-3]
-        print(packet)
+        # print(packet)
         decoded = bytearray()
         skip_next = False
         for i in range(len(packet)):
@@ -138,11 +138,14 @@ def parse_packet(decoded_pack):
     # print(f"status: 0x{status:02x}")
     data = None
     if cmd != 1 and cmd != 4:
-        DataLen = int.from_bytes(decoded_pack[8:10], byteorder="little")
-        print(f"DataLen: 0x{DataLen:04x}")
-        data = int.from_bytes(decoded_pack[10:], byteorder="big")
-        print(f"data: {hex(data)}")
-    print(f"packet: pid: {pid}, cmd: {cmd}, flags: {flags}, status: {status}, data: {data}")
+        # DataLen = int.from_bytes(decoded_pack[8:10], byteorder="little")
+        # print(f"DataLen: 0x{DataLen:04x}")
+        # data = int.from_bytes(decoded_pack[10:], byteorder="big")
+        DataLen = decoded_pack[8:10]
+        data = decoded_pack[10:]
+        # print(f"data: {data.hex()}")
+    # print(f"packet: pid: {pid}, cmd: {cmd}, flags: {flags}, status: {status}, data: {data}")
+
     return pid, cmd, flags, status, data
 
 
@@ -282,33 +285,39 @@ def time_set(socket, conf):
 # data = param+data
 
 
-def send_data_for_table_0x05(socket, conf, sended_packets, pid, text, num_disp):
+def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int, text: str, num_disp: int):
     """Отправка информации в текстовые поля табло (0x05)"""
 
+    #_______
+    # text = 'а123нн199'
+    # pid = 254
+    print(text)
+    #_______
+
     # # Пример использования: отправка пакета с выводом текста а123нн199 в 0 текстовую зону дисплея
-    text = 'а123нн199'
     src_addr = 0
     dst_addr = conf.get("DstAddr")
-    # pid = 254
     cmd = 0x05
-    flags = 0x00
     status = 0x80
     type_disp = 0x01
     disp = (type_disp << 6) | num_disp
     number_font = conf.get("NumberFont", 0)
     alignment = conf.get("AlignText", 0)
-
-    encoded_text = text.encode('cp1251')
+    flags = 0x00
+    if conf.get("UseMemory") == 1:
+        flags = 0x80
     color = conf.get("ColorText", 1)
+    encoded_text = text.encode('cp1251')
     if num_disp in (0, 1):
         color = conf.get("FirstStringColorText", 2)
     DataLen = len(text) + 9
-    param = struct.pack('<BBBBBBBBB', disp, 5, 0, 0, 0, 1, 0, 0, 0)
+    param = struct.pack('<BBBBBBBBB', disp, number_font, alignment, flags, 0, color, 0, 0, 0)
+    print(encoded_text)
     data = struct.pack('<' + 'B' * len(text), *encoded_text)
     data = param + data
     packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
     socket.sendto(packet, (conf.get("IPDst"), conf.get("PortDst")))
-    sended_packets[pid] = packet
+    sended_packets[pid] = {"packet": packet, "display": num_disp, "text": text}
 
 
 
