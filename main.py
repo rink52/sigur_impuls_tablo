@@ -3,7 +3,6 @@ import schedule
 import time
 import socket
 import errors_server
-import decode_packet
 import Service_parsed_db
 import impuls
 from os import path
@@ -59,6 +58,7 @@ try:
     queue_sended = {'1': '2fg3b-bb33', '3': 'А123АА333', '5': 'wqeqww'}
     queue_sending = {}
     sended_packets = {}
+    incoming_packets = {}
     last_pid: int = 0
 
     # Получаем список доп. параметров
@@ -68,6 +68,7 @@ try:
         global queue_sent_packets
         global queue_sended
         global sended_packets
+        global incoming_packets
         global queue_sending
         global last_pid
 
@@ -75,7 +76,7 @@ try:
         queue_not_changes = {}
 
 
-        # impuls.test_connection(server_socket, conf)
+
 
         # if sended_packets:
         #     last_key = list(sended_packets.keys())[-1]
@@ -112,7 +113,10 @@ try:
         """НУЖНО ДОБАВИТЬ УСЛОВИЕ ПРОВЕРКИ ОТСУТСТВИЯ НЕ ДОСТАВЛЕННЫХ ПАКЕТОВ
         ЕСЛИ ЕСТЬ ТАКИЕ ПАКЕТЫ, ТО ДОБАВИТЬ СВЕРИТЬ НОМЕРА ИЗ ПРОШЛОЙ ИТЕРАЦИИ И НОВОЙ 
         И ЕСЛИ В ПОЗИЦИИ НОМРА ОДИНАКОЫВЫЕ ТО ДОБАВИТЬ В ОЧЕРЕДЬ ЕЩЕ РАЗ"""
+        print("SENDED_PACKETS", sended_packets)
         if len(sended_packets) > 0:
+            result = impuls.check_incoming_packet(server_socket)
+            print(result)
             pass
 
 
@@ -142,6 +146,11 @@ try:
         print('last key', last_pid)
 
         sended_packets.clear()
+
+        while True:
+            if impuls.test_connection(server_socket, conf, sended_packets):
+                break
+
 
         for position, obj in queue_sending.items():
             if obj == "NULL":
@@ -188,7 +197,11 @@ try:
 
     # первичная настройка табло
         # проверка связи с табло
-    # impuls.test_connection(server_socket, conf)
+
+    while True:
+        if impuls.test_connection(server_socket, conf, sended_packets):
+            break
+
     # exit(1)
     #     # настраиваем яркость
     # impuls.set_bright(server_socket, conf)
@@ -228,9 +241,7 @@ try:
 
         # начинаем отправку данных
         try:
-            # смотрим есть ли в сокете пакеты
-            encoded_pack, clientaddress = server_socket.recvfrom(impuls.buffer_size)
-            print(encoded_pack.hex())
+            impuls.check_incoming_packet(server_socket, sended_packets)
         except BlockingIOError:
             # если нет то продолжаем ждать
             pass

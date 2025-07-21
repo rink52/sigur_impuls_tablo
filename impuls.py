@@ -1,9 +1,10 @@
 import datetime
 import struct
 import time
-import decode_packet
 import logging
 import socket
+
+# from main import sended_packets
 
 logger = logging.getLogger(__name__)
 
@@ -123,46 +124,38 @@ def decode_upper_level_packet(packet):
 
 
 def parse_packet(decoded_pack):
-    # print(decoded_pack.hex())
     src_addr = int.from_bytes(decoded_pack[:2], byteorder="little")
-    # print(f"src_addr: {src_addr:04}")
     dst_addr = int.from_bytes(decoded_pack[2:4], byteorder="little")
-    # print(f"dst_addr: {dst_addr:04}")
     pid = decoded_pack[4]
-    # print(f"pid: 0x{pid:02x}")
     cmd = decoded_pack[5]
-    # print(f"cmd: 0x{cmd:02x}")
     flags = decoded_pack[6]
-    # print(f"flags: 0x{flags:02x}")
     status = decoded_pack[7]
-    # print(f"status: 0x{status:02x}")
     data = None
     if cmd != 1 and cmd != 4:
-        # DataLen = int.from_bytes(decoded_pack[8:10], byteorder="little")
-        # print(f"DataLen: 0x{DataLen:04x}")
-        # data = int.from_bytes(decoded_pack[10:], byteorder="big")
         DataLen = decoded_pack[8:10]
         data = decoded_pack[10:]
-        # print(f"data: {data.hex()}")
-    # print(f"packet: pid: {pid}, cmd: {cmd}, flags: {flags}, status: {status}, data: {data}")
-
+    # print(f"request: pid: {pid}, cmd: {cmd}, flags: {flags}, status: {status}, data: {data}")
     return pid, cmd, flags, status, data
 
 
 def check_incoming_packet(socket=None, sended_packets=None):
+    approve_packet = False
     encoded_pack, clientaddress = socket.recvfrom(buffer_size)
-    decoded_pack = decode_packet.decode_upper_level_packet(encoded_pack)
-    result = decode_packet.parse_packet(decoded_pack)
+    decoded_pack = decode_upper_level_packet(encoded_pack)
+    result = parse_packet(decoded_pack)
+
     if sended_packets is not None:
-        if sended_packets.get(result[0]) and sended_packets.get(result[3]) == 0:
-            sended_packets.remove(result[0])
-    return result
+        if sended_packets.get(result[0]) and result[3] == 0:
+            del sended_packets[result[0]]
+            approve_packet = True
+    print(sended_packets)
+    return result, approve_packet
 
 
     #______________________________________________
     #___Обработка пактов в зависимости от задачи___
 
-def test_connection(socket, conf):
+def test_connection(socket, conf, sended_packets):
     """Тест связи с табло"""
     try:
         while True:
@@ -177,15 +170,20 @@ def test_connection(socket, conf):
             data = None
             packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
             socket.sendto(packet, (conf.get("IPDst"), conf.get("PortDst")))
+            sended_packets[pid] = {
+                "packet": packet,
+                "display": None,
+                "text": None
+            }
 
-            for _ in range(10):
+            for _ in range(50):
                 try:
-                    result = check_incoming_packet(socket=socket)
-                    print("response", result)
+                    result, approve = check_incoming_packet(socket=socket, sended_packets=sended_packets)
+                    print("response:", result)
                     if result[1] == 1 and result[3] == 0:
                         logger.debug("Соединение с табло активно")
                         print("Соединение с табло активно")
-                        return
+                        return approve
                 except BlockingIOError:
                     time.sleep(0.5)
                     continue  # если в буфере пакетов нет, то игнорируем
@@ -197,7 +195,7 @@ def test_connection(socket, conf):
         logger.error(
             f"Удаленный хост {conf['IPDst']}:{conf['PortDst']} принудительно разорвал существующее подключение. Проверьте корректность указанных данных для подключения")
         time.sleep(5)
-        test_connection(socket, conf)
+        test_connection(socket, conf, sended_packets)
 
 
 def set_bright(socket, conf):
@@ -213,6 +211,11 @@ def set_bright(socket, conf):
     data = struct.pack('B', conf.get("Brightness", 5))
     packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
     socket.sendto(packet, (conf.get("IPDst"), conf.get("PortDst")))
+    sended_packets[pid] = {
+        "packet": packet,
+        "display": None,
+        "text": None
+    }
 
     for _ in range(10):
         try:
@@ -290,37 +293,71 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
     Определение номера текстового поля осуществляется в соответствии с его строкой
     без разделения на сегменты "НомерТС и Ворота".
     Вывод текста происходит единой строкой в оба поля через пробелы из расчета 13 символов в строке.
-    В случае если нужно вывести номер А111АА111 в позиции 03, то нужно добавить 2 пробела 'A111AA111  03' """
-    src_addr = 0
-    dst_addr = conf.get("DstAddr")
-    cmd = 0x05
-    status = 0x80
-    type_disp = 0x01
-    disp = (type_disp << 6) | num_disp
-    number_font = conf.get("NumberFont", 0)
-    alignment = conf.get("AlignText", 0)
-    flags = 0x80 if conf.get("UseMemory") == 1 else flags = 0x00
-    color = conf.get("ColorText", 1)
+    В случае если нужно вывести номер А111АА111 в позиции 03, то нужно добавить 2 пробела 'A111AA111  03'
+
+    Args:
+        socket: Сокет для отправки данных
+        conf: Конфигурационный словарь
+        sended_packets: Словарь для хранения отправленных пакетов
+        pid: ID пакета
+        text: Текст для отображения
+        position: Позиция текста (формат 'X' или 'XX')
+        num_disp: Номер дисплея
+    """
+
+    # Подготовка параметров
+    disp = (0x01 << 6) | num_disp
+    flags = 0x80 if conf.get("UseMemory") == 1 else 0x00
+
+    # Форматирование текста и позиции
     position = position.zfill(2)
-    text = text + " "*(11-len(text)) + position
-    encoded_text = text.encode('cp1251')
-    if num_disp == 0:
-        color = conf.get("FirstStringColorText", 2)
-    print("-"*71, f"\n display_number: {num_disp} | lpr_number: '{text}' | Color text: {color}\n","-"*70)
-    DataLen = len(text) + 9
-    param = struct.pack('<BBBBBBBBB', disp, number_font, alignment, flags, 0, color, 0, 0, 0)
-    data = struct.pack('<' + 'B' * len(text), *encoded_text)
-    data = param + data
-    packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
-    socket.sendto(packet, (conf.get("IPDst"), conf.get("PortDst")))
-    sended_packets[pid] = {"packet": packet, "display": num_disp, "text": text}
+    formatted_text = f"{text.ljust(11)}{position}"
+
+    # Определение цвета текста
+    color = conf.get("FirstStringColorText", 2) if num_disp == 0 else conf.get("ColorText", 1)
+
+    # Логирование
+    logger.debug(f"\n display_number: {num_disp} | lpr_number: '{formatted_text}' | Color text: {color}\n")
+    print("-"*71, f"\n display_number: {num_disp} | lpr_number: '{formatted_text}' | Color text: {color}\n", "-"*70)
+
+    # Подготовка данных пакета
+    param = struct.pack('<BBBBBBBBB',
+                       disp,
+                       conf.get("NumberFont", 0),
+                       conf.get("AlignText", 0),
+                       flags,
+                       0,  # Не используется (скорость движения текста)
+                       color,
+                       0, 0, 0)  # Не используется (настройки эффектов)
+    data = param + formatted_text.encode('cp1251')
+
+    # Создание и отправка пакета
+    packet = make_full_packet(
+        src_addr=0,
+        dst_addr=conf["DstAddr"],
+        pid=pid,
+        cmd=0x05,
+        flags=flags,
+        status=0x80,
+        data_len=len(formatted_text) + 9,
+        data=data
+    )
+
+    socket.sendto(packet, (conf["IPDst"], conf["PortDst"]))
+    sended_packets[pid] = {
+        "packet": packet,
+        "display": num_disp,
+        "text": formatted_text
+    }
+
+
 
 
 
 
 
 if __name__ == "__main__":
-    print(__name__)
+    print("Тест связи с табло")
     try:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         server_socket.bind(('0.0.0.0', 0))
