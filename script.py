@@ -29,6 +29,7 @@ def queue_script(conf, sideparam):
         JOIN sideparamtypes spt ON spv.PARAM_IDX = spt.PARAM_IDX
         WHERE spv.TABLE_ID = 0 AND p.EMP_TYPE= 'EMP'
         GROUP BY p.id
+        HAVING MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamPosition']} THEN spv.VALUE END) IS NOT NULL
         ORDER BY position;
         """)
 

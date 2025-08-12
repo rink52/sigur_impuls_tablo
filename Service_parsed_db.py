@@ -47,8 +47,9 @@ def queue(conf, sideparam):
     response = {}
     queue_script = script.queue_script(conf, sideparam)
     result = dbconnect.query(queue_script)
+    print(result)
     if result:
-        response = {key: value for key, value in result}
+        response = {key: value for key, value in result if value is not None}
 
     return response
 

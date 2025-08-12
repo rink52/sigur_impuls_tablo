@@ -3,6 +3,8 @@ import struct
 import time
 import logging
 import socket
+from parsing_cfg import parse_cfg
+
 
 # from main import sended_packets
 
@@ -308,12 +310,21 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
     # Подготовка параметров
     disp = (0x01 << 6) | num_disp
     flags = 0x80 if conf.get("UseMemory") == 1 else 0x00
+    # определим нужно ли мигать текстом,Если номер строки 1 и параметр включен, то определяем параметры эффекта.
+    if num_disp == 0 and conf.get("FlashNew") == 1:
+        effect = 2
+        count_repeated = conf.get("CountRepeatedFlash") if str(conf.get("CountRepeatedFlash")).isdigit() else 0
+        time_interval = conf.get("TimeIntervalFlash") if str(conf.get("TimeIntervalFlash")).isdigit() else 0
+    else:
+        # иначе не мигаем
+        effect, count_repeated, time_interval = 0, 0, 0
 
-    # Форматирование текста и позиции
+    # Форматирование текста и позиции до CountSymbolString знаков, с учетом что позиция всегда 2-х значная.
+    count_symbol_string = conf.get("CountSymbolString")
     position = position.zfill(2)
-    formatted_text = f"{text.ljust(11)}{position}"
+    formatted_text = f"{text.ljust(count_symbol_string-2)}{position}"
 
-    # Определение цвета текста
+    # Определение цвета текста в зависимости от строки
     color = conf.get("FirstStringColorText", 2) if num_disp == 0 else conf.get("ColorText", 1)
 
     # Логирование
@@ -323,12 +334,14 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
     # Подготовка данных пакета
     param = struct.pack('<BBBBBBBBB',
                        disp,
-                       conf.get("NumberFont", 0),
-                       conf.get("AlignText", 0),
-                       flags,
-                       0,  # Не используется (скорость движения текста)
-                       color,
-                       0, 0, 0)  # Не используется (настройки эффектов)
+                        conf.get("NumberFont", 0),
+                        conf.get("AlignText", 0),
+                        flags,
+                        0,  # Не используется (скорость движения текста)
+                        color,
+                        effect,
+                        count_repeated,
+                        time_interval)
     data = param + formatted_text.encode('cp1251')
 
     # Создание и отправка пакета
@@ -357,21 +370,31 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
 
 
 if __name__ == "__main__":
-    print("Тест связи с табло")
+    conf: dict = parse_cfg()
+
     try:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         server_socket.bind(('0.0.0.0', 0))
         server_socket.setblocking(False)  # Неблокирующий режим
-        test_connection(server_socket, {"DstAddr": 1,
-                                        "IPDst": "127.0.0.1",
-                                        "PortDst": 5000
-                                        })
+        sended_packets = {}
+
+        print("Тест связи с табло")
+        test_connection(server_socket, conf, sended_packets)
+
+        print("Тест вывода текста в 8 строку")
+        text = 'а123нн199'
+        position = "1"
+        num_disp = 0
+        pid = 0x0f
+        send_data_for_table_0x05(server_socket, conf, sended_packets, pid, text, position, num_disp)
 
     except (OSError, OverflowError):
         # Если порт занят, то проверяем кем
         errors_server.find_process_using_port(conf['ServicePort'])
     finally:
         server_socket.close()
+
+
 
 # # Сформировать пакет
 # packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)

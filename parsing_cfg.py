@@ -82,7 +82,6 @@ def check_cfg(conf):
              "PasswordDB": ["int", "str"],
              "Period": ["int"],
              "NumberRows": ["int"],
-             "TwoSegmentString": ["int"],
              "TimeSync": ["int"],
              "Brightness": ["int"],
              "ColorText": ["int"],
@@ -114,9 +113,8 @@ def check_cfg(conf):
                 f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - parsing_cfg - ERROR - В конфигурационном файле отсутствуют необходимые параметры{param_not_found}\n")
             pass
         create_config()
-        return False
-    else:
-        return True
+    return correct
+
 
 
 def create_config():

@@ -55,11 +55,11 @@ except Exception as e:
 
 # Основной блок
 try:
-    queue_sended = {'1': '2fg3b-bb33', '3': 'А123АА333', '5': 'wqeqww'}
-    queue_sending = {}
-    sended_packets = {}
-    incoming_packets = {}
-    last_pid: int = 0
+    queue_sended = {'1': '2fg3b-bb33', '3': 'А123АА333', '5': 'wqeqww'}           # Ранее отправленная очередь {'1': '2fg3b-bb33', '3': 'А123АА333', '5': 'wqeqww'}
+    queue_sending = {}          # Очередь для отправки
+    sended_packets = {}         # Отправленные пакеты на которые не вернулся ответ ОК
+    incoming_packets = {}       # Входящие не обработанные пакеты
+    last_pid: int = 0           # последний использованный PID пакета (0 - 254)
 
     # Получаем список доп. параметров
     sideparam = Service_parsed_db.sideparam(conf)
@@ -72,7 +72,7 @@ try:
         global queue_sending
         global last_pid
 
-        pre_queue_sending = {}
+        pre_queue_sending = {}      # предварительная очередь отправки, полученная из БД
         queue_not_changes = {}
 
 
@@ -81,10 +81,13 @@ try:
         # if sended_packets:
         #     last_key = list(sended_packets.keys())[-1]
 
+        # очистка очереди отправки в новом цикле
         queue_sending.clear()
 
+        # получаем очередь отправки из БД
         queue = Service_parsed_db.queue(conf, sideparam)
         print("queue", queue)
+
         queue_not_changes.clear()
         # проверяем, что номер в прошлый раз отправлялся с этой же позицией в очереди и пропускаем его
         for key_queue, value_queue in queue.items():
@@ -96,9 +99,11 @@ try:
             elif int(key_queue) > conf['NumberRows']:
                 logger.info(f"Позиция в очереди для номера {value_queue} ровна {key_queue}, что больше чем указано в 'NumberRows'. Игнорируем.")
                 continue
+            # проверка на отрицательные значения
             elif int(key_queue) < 1:
                 logger.info(f"Позиция в очереди для номера {value_queue} ровна {key_queue}, что меньше 1. Игнорируем.")
                 continue
+            # проверка номера не изменившего свою позицию с прошлой итерации. Если есть, то исключаем из очереди.
             elif value_queue == queue_sended.get(str(int(key_queue))):
                 pre_queue_sending[int(key_queue)] = "NULL"
                 continue
@@ -107,8 +112,10 @@ try:
                 pre_queue_sending[int(key_queue)] = value_queue
                 if len(pre_queue_sending) == conf['NumberRows']:
                     break
-
+        print("pre_queue_sending: ", pre_queue_sending)
         # теперь у нас есть предварительная очередь отправки pre_queue_sending, добавим пустые строки и сформируем готовую очередь отправки
+
+
 
         """НУЖНО ДОБАВИТЬ УСЛОВИЕ ПРОВЕРКИ ОТСУТСТВИЯ НЕ ДОСТАВЛЕННЫХ ПАКЕТОВ
         ЕСЛИ ЕСТЬ ТАКИЕ ПАКЕТЫ, ТО ДОБАВИТЬ СВЕРИТЬ НОМЕРА ИЗ ПРОШЛОЙ ИТЕРАЦИИ И НОВОЙ 
@@ -127,6 +134,8 @@ try:
                 queue_sending[index] = pre_queue_sending.get(index)
             else:
                 queue_sending[index] = " "
+        print("queue_sending: ", queue_sending)
+
 
         # обработаем очередь ранее отправленных и удалим элементы которые не сохранили позицию.
         # Это нужно для следующей итерации
@@ -224,9 +233,7 @@ try:
     # while True:
     #     server_socket.recvfrom(impuls.buffer_size)
     print("sended_packets:", sended_packets)
-    input("stop...")
     # _________________________________________
-
 
 
     # превентивно запускаем main() для формирования первичной очереди
