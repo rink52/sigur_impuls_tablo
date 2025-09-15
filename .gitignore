@@ -36,3 +36,6 @@ server.bat
 server.py
 tablo.py
 decode_packet.py
+errors_server.py
+script.py
+main_old.py
