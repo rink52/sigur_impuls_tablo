@@ -1,9 +1,6 @@
 import os
 import logging
-
 from logging.handlers import RotatingFileHandler
-from venv import logger
-
 
 def setup_logging(maxsize=5, countlogs=2, log_dir='logs', log_file='app.log'):
     """Настройка логирования для всего проекта"""
@@ -43,7 +40,5 @@ def setup_logging(maxsize=5, countlogs=2, log_dir='logs', log_file='app.log'):
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
-    # # Логгер для SQL-запросов (можно отключить в продакшене)
-    # logging.getLogger('main').setLevel(logging.DEBUG)
 
 

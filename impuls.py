@@ -5,9 +5,6 @@ import logging
 import socket
 from parsing_cfg import parse_cfg
 
-
-# from main import sended_packets
-
 logger = logging.getLogger(__name__)
 
 buffer_size = 128
@@ -94,13 +91,6 @@ def make_full_packet(src_addr: int, dst_addr: int, pid: int, cmd: int, flags: in
     return full_packet
 
 
-# def send_packet_udp(socket, ip, port, packet):
-#     """ Функция отправки пакета по IP (UDP) """
-#     # print(packet.hex())
-#     status = socket.sendto(packet, (ip, port))
-#     # print(status)
-
-
 def decode_upper_level_packet(packet):
     """Decode the received packet to extract the response."""
     if packet[0] == 0x02 and packet[-1] == 0x03:
@@ -136,7 +126,7 @@ def parse_packet(decoded_pack):
     if cmd != 1 and cmd != 4:
         DataLen = decoded_pack[8:10]
         data = decoded_pack[10:]
-    # print(f"request: pid: {pid}, cmd: {cmd}, flags: {flags}, status: {status}, data: {data}")
+    logger.debug(f"request_parse_incoming_packet: pid: {pid}, cmd: {cmd}, flags: {flags}, status: {status}, data: {data}")
     return pid, cmd, flags, status, data
 
 
@@ -145,19 +135,19 @@ def check_incoming_packet(socket=None, sended_packets=None):
     encoded_pack, clientaddress = socket.recvfrom(buffer_size)
     decoded_pack = decode_upper_level_packet(encoded_pack)
     result = parse_packet(decoded_pack)
-
+    logger.debug(f"Sended_packets: {sended_packets}")
     if sended_packets is not None:
         if sended_packets.get(result[0]) and result[3] == 0:
+            logger.debug(f"Получили ответ. Удаляем пакет {sended_packets.get(result[0])} из sended_packets.")
             del sended_packets[result[0]]
             approve_packet = True
-    print(sended_packets)
     return result, approve_packet
 
 
     #______________________________________________
     #___Обработка пактов в зависимости от задачи___
 
-def test_connection(socket, conf, sended_packets):
+def test_connection(socket, conf):
     """Тест связи с табло"""
     try:
         while True:
@@ -172,20 +162,14 @@ def test_connection(socket, conf, sended_packets):
             data = None
             packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
             socket.sendto(packet, (conf.get("IPDst"), conf.get("PortDst")))
-            sended_packets[pid] = {
-                "packet": packet,
-                "display": None,
-                "text": None
-            }
 
             for _ in range(50):
                 try:
-                    result, approve = check_incoming_packet(socket=socket, sended_packets=sended_packets)
-                    print("response:", result)
+                    result, approve = check_incoming_packet(socket=socket, sended_packets=None)
                     if result[1] == 1 and result[3] == 0:
                         logger.debug("Соединение с табло активно")
                         print("Соединение с табло активно")
-                        return approve
+                        return True
                 except BlockingIOError:
                     time.sleep(0.5)
                     continue  # если в буфере пакетов нет, то игнорируем
@@ -197,12 +181,11 @@ def test_connection(socket, conf, sended_packets):
         logger.error(
             f"Удаленный хост {conf['IPDst']}:{conf['PortDst']} принудительно разорвал существующее подключение. Проверьте корректность указанных данных для подключения")
         time.sleep(5)
-        test_connection(socket, conf, sended_packets)
+        test_connection(socket, conf)
 
 
 def set_bright(socket, conf):
     """Установка яркости"""
-
     src_addr = 0x0000
     dst_addr = conf.get("DstAddr")
     pid = 0
@@ -213,15 +196,11 @@ def set_bright(socket, conf):
     data = struct.pack('B', conf.get("Brightness", 5))
     packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
     socket.sendto(packet, (conf.get("IPDst"), conf.get("PortDst")))
-    sended_packets[pid] = {
-        "packet": packet,
-        "display": None,
-        "text": None
-    }
+
 
     for _ in range(10):
         try:
-            result = check_incoming_packet(socket=socket)
+            result, approve = check_incoming_packet(socket=socket, sended_packets=None)
             if result[1] == 2:
                 if result[3] == 0:
                     logger.debug("Ярксть настроена корректно")
@@ -234,7 +213,7 @@ def set_bright(socket, conf):
                 continue
         except BlockingIOError:
             # если в сокете пакетов нет то игнорируем
-            time.sleep(0.5)
+            time.sleep(0.2)
             continue
     logger.debug("Не удалось настроить яркость.")
     print("Не удалось настроить яркость.")
@@ -242,7 +221,6 @@ def set_bright(socket, conf):
 
 def time_set(socket, conf):
     """Установка времени на табло"""
-
     src_addr = 0x0000
     dst_addr = conf.get("DstAddr")
     pid = 0
@@ -254,9 +232,10 @@ def time_set(socket, conf):
     data = struct.pack('<BBBBBB', int(date[0]), int(date[1]), int(date[2]), int(date[3]), int(date[4]), int(date[5]))
     packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
     socket.sendto(packet, (conf.get("IPDst"), conf.get("PortDst")))
+
     for _ in range(10):
         try:
-            result = check_incoming_packet(socket=socket)
+            result, approve = check_incoming_packet(socket=socket, sended_packets=None)
             if result[1] == 3:
                 if result[3] == 0:
                     logger.debug("Время настроено корректно")
@@ -275,22 +254,7 @@ def time_set(socket, conf):
     print("Не удалось настроить время.")
 
 
-# # Пример использования: отправка пакета с выводом текста а123нн199 в 0 сегмент
-# text = 'а123нн199'
-# src_addr = 0x0000
-# dst_addr = 0x0001
-# pid = 0x0f
-# cmd = 0x1B
-# flags = 0x02
-# status = 0x00
-# encoded_text = text.encode('cp1251')
-# DataLen = len(text) + 7
-# param = struct.pack('<BBBBBBB', 0, 0, 0, 1, 0, 1, 0)
-# data = struct.pack('<'+'B'*len(text), *encoded_text)
-# data = param+data
-
-
-def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int, text: str, position: str,  num_disp: int):
+def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int, text: str, position: str,  num_disp: int, data_pack):
     """Отправка информации в текстовые поля табло (0x05)
     Определение номера текстового поля осуществляется в соответствии с его строкой
     без разделения на сегменты "НомерТС и Ворота".
@@ -302,47 +266,56 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
         conf: Конфигурационный словарь
         sended_packets: Словарь для хранения отправленных пакетов
         pid: ID пакета
-        text: Текст для отображения
-        position: Позиция текста (формат 'X' или 'XX')
-        num_disp: Номер дисплея
+        text: Номер для отображения
+        position: Позиция номера в очереди
+        num_disp: Номер дисплея для вывода
     """
 
-    # Подготовка параметров
-    disp = (0x01 << 6) | num_disp
-    flags = 0x80 if conf.get("UseMemory") == 1 else 0x00
-    # определим нужно ли мигать текстом,Если номер строки 1 и параметр включен, то определяем параметры эффекта.
-    if num_disp == 0 and conf.get("FlashNew") == 1:
-        effect = 2
-        count_repeated = conf.get("CountRepeatedFlash") if str(conf.get("CountRepeatedFlash")).isdigit() else 0
-        time_interval = conf.get("TimeIntervalFlash") if str(conf.get("TimeIntervalFlash")).isdigit() else 0
+    if data_pack is None:
+        # Подготовка параметров
+        disp = (0x01 << 6) | num_disp
+        flags = 0x80 if conf.get("UseMemory") == 1 else 0x00
+
+        # определим нужно ли мигать текстом. Если номер строки 1 и параметр включен, то определяем параметры эффекта.
+        if num_disp == 0 and conf.get("FlashNew") == 1:
+            effect = 2
+            count_repeated = conf.get("CountRepeatedFlash") if str(conf.get("CountRepeatedFlash")).isdigit() else 0
+            time_interval = conf.get("TimeIntervalFlash") if str(conf.get("TimeIntervalFlash")).isdigit() else 0
+        else:
+            # иначе не мигаем
+            effect, count_repeated, time_interval = 0, 0, 0
+
+        # Форматирование текста и позиции до CountSymbolString знаков, с учетом что позиция всегда 2-х значная.
+        count_symbol_string = conf.get("CountSymbolString")
+        position = position.zfill(2)
+        formatted_text = f"{text.ljust(count_symbol_string-2)}{position}"
+
+        # Определение цвета текста в зависимости от строки
+        color = conf.get("FirstStringColorText", 2) if num_disp == 0 else conf.get("ColorText", 1)
+
+        # Логирование
+        logger.debug(f"\n display_number: {num_disp} | lpr_number: '{formatted_text}' | Color text: {color}\n")
+        if conf.get("Debug", 0) == 2:
+            print("-"*71, f"\n display_number: {num_disp} | lpr_number: '{formatted_text}' | Color text: {color}\n", "-"*70)
+
+        # Подготовка данных пакета
+        param = struct.pack('<BBBBBBBBB',
+                           disp,
+                            conf.get("NumberFont", 0),
+                            conf.get("AlignText", 0),
+                            flags,
+                            0,  # Не используется (скорость движения текста)
+                            color,
+                            effect,
+                            count_repeated,
+                            time_interval)
+        data = param + formatted_text.encode('cp1251')
+
+
     else:
-        # иначе не мигаем
-        effect, count_repeated, time_interval = 0, 0, 0
-
-    # Форматирование текста и позиции до CountSymbolString знаков, с учетом что позиция всегда 2-х значная.
-    count_symbol_string = conf.get("CountSymbolString")
-    position = position.zfill(2)
-    formatted_text = f"{text.ljust(count_symbol_string-2)}{position}"
-
-    # Определение цвета текста в зависимости от строки
-    color = conf.get("FirstStringColorText", 2) if num_disp == 0 else conf.get("ColorText", 1)
-
-    # Логирование
-    logger.debug(f"\n display_number: {num_disp} | lpr_number: '{formatted_text}' | Color text: {color}\n")
-    print("-"*71, f"\n display_number: {num_disp} | lpr_number: '{formatted_text}' | Color text: {color}\n", "-"*70)
-
-    # Подготовка данных пакета
-    param = struct.pack('<BBBBBBBBB',
-                       disp,
-                        conf.get("NumberFont", 0),
-                        conf.get("AlignText", 0),
-                        flags,
-                        0,  # Не используется (скорость движения текста)
-                        color,
-                        effect,
-                        count_repeated,
-                        time_interval)
-    data = param + formatted_text.encode('cp1251')
+        flags = data_pack[3]
+        data = data_pack[4]
+        formatted_text = text
 
     # Создание и отправка пакета
     packet = make_full_packet(
@@ -367,42 +340,31 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
 
 
 
-
-
 if __name__ == "__main__":
+    # тест вывода информации на 1 строку дисплея
     conf: dict = parse_cfg()
-
+    sended_packets = {}
     try:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         server_socket.bind(('0.0.0.0', 0))
         server_socket.setblocking(False)  # Неблокирующий режим
-        sended_packets = {}
 
         print("Тест связи с табло")
-        test_connection(server_socket, conf, sended_packets)
+        test_connection(server_socket, conf)
 
-        print("Тест вывода текста в 8 строку")
-        text = 'а123нн199'
-        position = "1"
-        num_disp = 0
-        pid = 0x0f
-        send_data_for_table_0x05(server_socket, conf, sended_packets, pid, text, position, num_disp)
+        print("Тест вывода текста в 1 строку")
+        for i in range(conf.get("NumberRows", 8)):
+            if i == 0:
+                text = 'а123нн199'
+            else:
+                text = ''
+            position = str(i+1)
+            num_disp = i
+            pid = i+1
+            send_data_for_table_0x05(server_socket, conf, sended_packets, pid, text, position, num_disp, None)
 
     except (OSError, OverflowError):
         # Если порт занят, то проверяем кем
         errors_server.find_process_using_port(conf['ServicePort'])
     finally:
         server_socket.close()
-
-
-
-# # Сформировать пакет
-# packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
-#
-# # Отправить пакет на устройство
-# ip = '127.0.0.1'
-# port = 5000
-#
-# while True:
-#     time.sleep(1)
-#     send_packet_udp(ip, port, packet)
