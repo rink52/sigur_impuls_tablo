@@ -8,14 +8,17 @@ from os import path
 from logging_config import setup_logging
 from parsing_cfg import parse_cfg
 import psutil
+import signal
 
 
 # Проверка компонентов
-library_files = ('parsing_cfg.py',
-                 'maria.py',
+library_files = ('impuls.cfg',
+                 'impuls.py',
                  'logging_config.py',
-                 'Service_parsed_db.py',
-                 'impuls.py'
+                 'main.py',
+                 'maria.py',                 
+                 'parsing_cfg.py',
+                 'Service_parsed_db.py'
                  )
 
 server_socket = None
@@ -29,6 +32,11 @@ if not all(path.exists(name) for name in library_files):
 # Чтение конфигурации
 conf: dict = parse_cfg()
 
+
+def handler(signum, frame):
+    logger.info("Получен сигнал принудительного закрытия. Завершаем работу.")
+    exit(0)
+
 # Инициализация логирования
 try:
     setup_logging(maxsize=int(conf.get("LenLog", 100)), countlogs=conf.get('Count_logs_file', 2))
@@ -36,12 +44,14 @@ try:
     logging.getLogger('main').setLevel(logging.INFO)
 
     # Если в config включен Debug=1 режим, то активируем рассширенное логгирование
-    if conf.get('Debugы', 0) == 1:
+    if conf.get('Debug', 0) == 1:
         logging.getLogger().setLevel(logging.DEBUG)
         logging.getLogger('main').setLevel(logging.DEBUG)
         logger.debug(
             "Включено расширенное логгирование. Если это не требуется, то выключите параметр Debug в impuls.cfg")
         print("Включено расширенное логгирование. Если это не требуется, то выключите параметр Debug в impuls.cfg")
+
+    signal.signal(signal.SIGINT, handler)
 
     logger.info(f"Сервис запущен")
 except Exception as e:
@@ -61,6 +71,8 @@ def find_process_using_port(port):
                 print(f"Порт {port} занят процессом: PID: {pid}, Имя процесса: {process.name()}, Статус: {conn.status}, Локальный адрес: {conn.laddr.ip}")
                 logger.warning(f"Порт {port} занят процессом: PID: {pid}, Имя процесса: {process.name()}, Статус: {conn.status}, Локальный адрес: {conn.laddr.ip}")
     return None
+
+
 
 # Основной блок
 try:
@@ -169,9 +181,9 @@ try:
     main(server_socket, conf)
 
     while True:
+        print("Keep Alive")
         # Проверяем необходимость запуска функции main
         schedule.run_pending()
-
 
         # получаем время следующего запуска
         next_run = job.next_run.timestamp()
@@ -180,7 +192,6 @@ try:
         time_remaining = next_run - time.time()
         logger.debug(f"До следующего запуска: {time_remaining:.0f} секунд")
         if conf.get('Debug', 0) == 1:
-            print("Keep Alive")
             print(f"До следующего запуска: {time_remaining:.0f} секунд")
 
 

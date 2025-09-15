@@ -170,6 +170,7 @@ def test_connection(socket, conf):
             time.sleep(5)
 
     except ConnectionResetError:
+        print("Ошибка соединения")
         logger.error(
             f"Удаленный хост {conf['IPDst']}:{conf['PortDst']} принудительно разорвал существующее подключение. Проверьте корректность указанных данных для подключения")
         time.sleep(5)
