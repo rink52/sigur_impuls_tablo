@@ -83,7 +83,7 @@ try:
         sended_packets.clear()
 
         # получаем очередь отправки из БД
-        # queue = {'03': 'фывваа', '2': 'А123АА333', '8': 'B22g54SDf'}
+        # queue = {'03': 'фывваа', '2': 'А123АА333', '8': 'B22g54SDf', "2": "AAABBBCCCDDDD"}
         queue = Service_parsed_db.queue(conf, sideparam)
 
         logger.debug("queue:", queue)
@@ -179,7 +179,7 @@ try:
         # Вычисляем оставшееся время до следующего запуска
         time_remaining = next_run - time.time()
         logger.debug(f"До следующего запуска: {time_remaining:.0f} секунд")
-        if conf.get('Debug', 0) == 2:
+        if conf.get('Debug', 0) == 1:
             print("Keep Alive")
             print(f"До следующего запуска: {time_remaining:.0f} секунд")
 

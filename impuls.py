@@ -92,14 +92,9 @@ def make_full_packet(src_addr: int, dst_addr: int, pid: int, cmd: int, flags: in
 
 
 def decode_upper_level_packet(packet):
-    """Decode the received packet to extract the response."""
+    """Декодируем пакет для получения результата"""
     if packet[0] == 0x02 and packet[-1] == 0x03:
-        len_lo = packet[1:2]
-        len_hi = packet[2:3]
-        checksum = packet[-3:-1]
-        # print(len_lo, len_hi, checksum)
         packet = packet[3:-3]
-        # print(packet)
         decoded = bytearray()
         skip_next = False
         for i in range(len(packet)):
@@ -116,17 +111,14 @@ def decode_upper_level_packet(packet):
 
 
 def parse_packet(decoded_pack):
-    src_addr = int.from_bytes(decoded_pack[:2], byteorder="little")
-    dst_addr = int.from_bytes(decoded_pack[2:4], byteorder="little")
     pid = decoded_pack[4]
     cmd = decoded_pack[5]
     flags = decoded_pack[6]
     status = decoded_pack[7]
     data = None
     if cmd != 1 and cmd != 4:
-        DataLen = decoded_pack[8:10]
         data = decoded_pack[10:]
-    logger.debug(f"request_parse_incoming_packet: pid: {pid}, cmd: {cmd}, flags: {flags}, status: {status}, data: {data}")
+    logger.debug(f"Ответ из входящего пакета: pid: {pid}, cmd: {cmd}, flags: {flags}, status: {status}, data: {data}")
     return pid, cmd, flags, status, data
 
 
@@ -295,7 +287,7 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
 
         # Логирование
         logger.debug(f"\n display_number: {num_disp} | lpr_number: '{formatted_text}' | Color text: {color}\n")
-        if conf.get("Debug", 0) == 2:
+        if conf.get('Debug', 0) == 1:
             print("-"*71, f"\n display_number: {num_disp} | lpr_number: '{formatted_text}' | Color text: {color}\n", "-"*70)
 
         # Подготовка данных пакета
@@ -341,7 +333,7 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
 
 
 if __name__ == "__main__":
-    # тест вывода информации на 1 строку дисплея
+    # тест вывода информации в первую строку дисплея
     conf: dict = parse_cfg()
     sended_packets = {}
     try:
