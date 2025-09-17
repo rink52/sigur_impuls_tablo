@@ -1,8 +1,9 @@
-import datetime
-import struct
-import time
 import logging
 import socket
+import struct
+import time
+from datetime import datetime
+
 from parsing_cfg import parse_cfg
 
 logger = logging.getLogger(__name__)
@@ -221,7 +222,7 @@ def time_set(socket, conf):
     flags = 0x02  # игнорируем pid
     status = 0x80
     DataLen = 6
-    date = datetime.datetime.now().strftime("%S-%M-%H-%d-%m-%y").split("-")
+    date = datetime.now().strftime("%S-%M-%H-%d-%m-%y").split("-")
     data = struct.pack('<BBBBBB', int(date[0]), int(date[1]), int(date[2]), int(date[3]), int(date[4]), int(date[5]))
     packet = make_full_packet(src_addr, dst_addr, pid, cmd, flags, status, DataLen, data)
     socket.sendto(packet, (conf.get("IPDst"), conf.get("PortDst")))

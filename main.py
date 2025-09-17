@@ -1,37 +1,52 @@
+import argparse
 import logging
-import schedule
-import time
+import signal
 import socket
+import time
+from os import path
+
+import psutil
+import schedule
+
 import Service_parsed_db
 import impuls
-from os import path
 from logging_config import setup_logging
 from parsing_cfg import parse_cfg
-import psutil
-import signal
 
+# Парсим аргумент --launcher-dir
+parser = argparse.ArgumentParser()
+parser.add_argument('--launcher-dir', type=str, help='Путь к директории, откуда запущен launcher')
+args = parser.parse_args()
+
+# Определяем, где искать config.cfg
+if args.launcher_dir and path.isdir(args.launcher_dir):
+    config_path = path.join(args.launcher_dir, "impuls.cfg")
+else:
+    # Fallback: если аргумент не передан — ищем рядом с main.py (для отладки)
+    config_path = path.join(path.dirname(path.abspath(__file__)), "impuls.cfg")
+
+if not path.exists(config_path):
+    print(f"Ошибка: файл конфигурации {config_path} не найден!")
+    exit(1)
 
 # Проверка компонентов
-library_files = ('impuls.cfg',
-                 'impuls.py',
+library_files = ('impuls.py',
                  'logging_config.py',
                  'main.py',
-                 'maria.py',                 
+                 'maria.py',
                  'parsing_cfg.py',
                  'Service_parsed_db.py'
                  )
 
 server_socket = None
 
-
-if not all(path.exists(name) for name in library_files):
+if not all(path.exists(path.join(path.dirname(path.abspath(__file__)), name)) for name in library_files):
     exit("Ошибка: Отсутствуют необходимые файлы интеграции")
 
 # Инициализация компонентов
 
 # Чтение конфигурации
-conf: dict = parse_cfg()
-
+conf: dict = parse_cfg(config_path)
 
 def handler(signum, frame):
     logger.info("Получен сигнал принудительного закрытия. Завершаем работу.")

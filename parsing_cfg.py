@@ -1,3 +1,4 @@
+import os.path
 from os import path, remove, rename, makedirs
 from datetime import datetime
 from textwrap import dedent as format_str
@@ -60,10 +61,10 @@ if path.exists("logs") == False:
 # Debug=0
 
 
-def parse_cfg():
+def parse_cfg(config_path):
     try:
         conf = {}
-        with open(filename, "r", encoding="utf-8") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             while True:
                 line = f.readline()
                 if not line:
@@ -133,5 +134,5 @@ def check_cfg(conf):
 
 
 if __name__ == '__main__':
-    conf = parse_cfg()
+    conf = parse_cfg(os.path.abspath("impuls.cfg"))
     print(conf)

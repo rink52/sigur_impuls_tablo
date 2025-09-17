@@ -21,6 +21,9 @@ doc/
 *.env
 .env/
 
+*.spec
+
+
 # Logs
 *.log
 logs/
@@ -29,6 +32,7 @@ logs/
 emul/
 safe/
 test/
+impuls/
 
 # Other
 .gitignore
@@ -39,3 +43,5 @@ decode_packet.py
 errors_server.py
 script.py
 main_old.py
+icon.ico
+launcher_new.py
