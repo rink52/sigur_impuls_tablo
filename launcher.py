@@ -233,4 +233,4 @@ if __name__ == "__main__":
         monitor.run()
     except KeyboardInterrupt:
         print("\nЗавершение работы монитора...")
-        monitor.shtdown()
+        monitor.shutdown()
