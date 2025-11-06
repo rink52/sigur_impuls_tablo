@@ -153,7 +153,6 @@ try:
                 queue_sending[index] = pre_queue_sending.get(index)
             else:
                 queue_sending[index] = " "
-        print("queue_sending: ", queue_sending)
         while True:
             if impuls.test_connection(server_socket, conf):
                 break
