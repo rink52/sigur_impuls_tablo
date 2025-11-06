@@ -333,9 +333,6 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
         "text": formatted_text
     }
 
-
-
-
 if __name__ == "__main__":
     # тест вывода информации в первую строку дисплея
     conf: dict = parse_cfg("impuls.cfg")
@@ -347,14 +344,19 @@ if __name__ == "__main__":
 
         print("Тест связи с табло")
         test_connection(server_socket, conf)
+        print("Тест вывода на табло номера 'AABBCC78' в 6 ворота")
+        string_text = input("Введите в какую строку вывести информацию: ")
 
-        for i in range(1, conf.get("NumberRows", 8)):
-            if i == 0:
+        if not string_text.isdigit() or 1 > int(string_text) or int(string_text) > conf.get("NumberRows", 8):
+            print("Неверно указана строка, табло будет очищено")
+            string_text = 0
+        for i in range(1, conf.get("NumberRows", 8) + 1):
+            if i == int(string_text):
                 print(f"Тест вывода текста в {i} строку")
-                position = '1'
-                number = 'AABBCC1'
+                position = str(string_text)
+                number = 'AABBCC78'
                 text = position + " " + number
-                gate = str(i + 1)
+                gate = '6'
             else:
                 text = ''
                 gate = ''
