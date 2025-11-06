@@ -36,6 +36,8 @@ if path.exists("logs") == False:
 # NameSideparamNum=Гос. номер
 # # Название дополнительного параметра, где хранятся данные о порядковом номере очереди
 # NameSideparamPosition=Позиция в очереди
+# # Название дополнительного параметра, где хранятся данные о номере ворот для проезда
+# NameSideparamGate=Ворота
 # # Цвет отображаемого текста (1- красный, 2 — зеленый, 3 — синий)
 # ColorText=1
 # # Цвет отображаемого текста в 1 строке (1- красный, 2 — зеленый, 3 — синий)
@@ -101,6 +103,7 @@ def check_cfg(conf):
              "ParamNum": ["int"],
              "NameSideparamNum": ["int", "str"],
              "NameSideparamPosition": ["int", "str"],
+             "NameSideparamGate": ["int", "str"],
              "ColorText": ["int"],
              "FirstStringColorText": ["int"],
              "NumberFont": ["int"],

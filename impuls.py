@@ -248,7 +248,7 @@ def time_set(socket, conf):
     print("Не удалось настроить время.")
 
 
-def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int, text: str, position: str,  num_disp: int, data_pack):
+def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int, text: str, gate: str,  num_disp: int, data_pack):
     """Отправка информации в текстовые поля табло (0x05)
     Определение номера текстового поля осуществляется в соответствии с его строкой
     без разделения на сегменты "НомерТС и Ворота".
@@ -260,8 +260,8 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
         conf: Конфигурационный словарь
         sended_packets: Словарь для хранения отправленных пакетов
         pid: ID пакета
-        text: Номер для отображения
-        position: Позиция номера в очереди
+        text: Номер строки + Гос.номер
+        gate: Номер ворот
         num_disp: Номер дисплея для вывода
     """
 
@@ -281,8 +281,9 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
 
         # Форматирование текста и позиции до CountSymbolString знаков, с учетом что позиция всегда 2-х значная.
         count_symbol_string = conf.get("CountSymbolString")
-        position = position.zfill(2)
-        formatted_text = f"{text.ljust(count_symbol_string-2)}{position}"
+        if gate.isdigit():
+            gate = gate.zfill(2)
+        formatted_text = f"{text.ljust(count_symbol_string-2)}{gate}"
 
         # Определение цвета текста в зависимости от строки
         color = conf.get("FirstStringColorText", 2) if num_disp == 0 else conf.get("ColorText", 1)
@@ -307,9 +308,11 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
 
 
     else:
-        flags = data_pack[3]
+        flags = data_pack[2]
         data = data_pack[4]
         formatted_text = text
+
+
 
     # Создание и отправка пакета
     packet = make_full_packet(
@@ -333,10 +336,9 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
 
 
 
-
 if __name__ == "__main__":
     # тест вывода информации в первую строку дисплея
-    conf: dict = parse_cfg()
+    conf: dict = parse_cfg("impuls.cfg")
     sended_packets = {}
     try:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -349,13 +351,14 @@ if __name__ == "__main__":
         print("Тест вывода текста в 1 строку")
         for i in range(conf.get("NumberRows", 8)):
             if i == 0:
-                text = 'а123нн199'
+                text = '1 aaa1234'
+                gate = str(i + 1)
             else:
                 text = ''
-            position = str(i+1)
+                gate = ''
             num_disp = i
             pid = i+1
-            send_data_for_table_0x05(server_socket, conf, sended_packets, pid, text, position, num_disp, None)
+            send_data_for_table_0x05(server_socket, conf, sended_packets, pid, text, gate, num_disp, None)
 
     except (OSError, OverflowError):
         # Если порт занят, то проверяем кем

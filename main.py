@@ -110,33 +110,38 @@ try:
         sended_packets.clear()
 
         # получаем очередь отправки из БД
-        # queue = {'03': 'фывваа', '2': 'А123АА333', '8': 'B22g54SDf', "2": "AAABBBCCCDDDD"}
+        # queue = {'1': ['12VAAA14', '9'], '3': ['AAA1234', '5'], '7': ['hhfff', '4']}
         queue = Service_parsed_db.queue(conf, sideparam)
-
         logger.debug("queue:", queue)
         # проверяем значения на соответствие требованиям отправки
-        for key_queue, value_queue in queue.items():
-            # проверим, что позиция в очереди указана числом
-            if not key_queue.isdigit():
-                logger.error(
-                    f"Позиция в очереди для номера {value_queue} не число и имеет значение {key_queue}. Игнорируем.")
+        for position_queue, value_queue in queue.items():
+            lprnumber_queue, gate_queue = value_queue
+            # проверим, что позиция и ворота указаны числом
+            if not position_queue.isdigit():
+                logger.error(f"Позиция в очереди для номера {lprnumber_queue} не число и имеет значение {position_queue}. Игнорируем.")
+                continue
+            elif not gate_queue.isdigit():
+                logger.error(f"Ворота указанные для номера {lprnumber_queue} не число и имеет значение {gate_queue}. Игнорируем.")
                 continue
             # проверим, что позиция в очереди не больше количества места на табло
-            elif int(key_queue) > conf['NumberRows']:
-                logger.info(
-                    f"Позиция в очереди для номера {value_queue} ровна {key_queue}, что больше чем указано в 'NumberRows'. Игнорируем.")
+            elif int(position_queue) > conf['NumberRows']:
+                logger.info(f"Позиция в очереди для номера {lprnumber_queue} имеет значение {position_queue}, что больше {conf['NumberRows']}. Игнорируем.")
                 continue
             # проверка на отрицательные значения
-            elif int(key_queue) < 1:
-                logger.info(f"Позиция в очереди для номера {value_queue} ровна {key_queue}, что меньше 1. Игнорируем.")
+            elif int(position_queue) < 1:
+                logger.info(f"Позиция в очереди для номера {lprnumber_queue} имеет значение {position_queue}, что меньше 1. Игнорируем.")
                 continue
-            elif len(value_queue) > conf.get('CountSymbolString') - 3:
-                logger.info(f"Длина номера превышает длину строки. Номер '{value_queue}' будет обрезан до '{value_queue[:conf.get('CountSymbolString') - 2]}'")
-                print(f"Длина номера превышает длину строки. Номер '{value_queue}' будет обрезан до '{value_queue[:conf.get('CountSymbolString') - 2]}'")
-                pre_queue_sending[int(key_queue)] = value_queue[:conf.get('CountSymbolString') - 3]
+            elif int(gate_queue) < 1:
+                logger.info(f"Ворота указанные для номера {lprnumber_queue} имеют значние {gate_queue}, что меньше 1. Игнорируем.")
+                сontinue
+            # проверка длины номера
+            elif len(lprnumber_queue) > conf.get('CountSymbolString') - 3:
+                logger.info(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 2]}'")
+                print(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 2]}'")
+                pre_queue_sending[int(position_queue)] = [lprnumber_queue[:conf.get('CountSymbolString') - 3], gate_queue]
             else:
                 # иначе добавляем в очередь отправки
-                pre_queue_sending[int(key_queue)] = value_queue
+                pre_queue_sending[int(position_queue)] = [lprnumber_queue, gate_queue]
 
             if len(pre_queue_sending) == conf['NumberRows']:
                 break
@@ -148,18 +153,24 @@ try:
                 queue_sending[index] = pre_queue_sending.get(index)
             else:
                 queue_sending[index] = " "
-
+        print("queue_sending: ", queue_sending)
         while True:
             if impuls.test_connection(server_socket, conf):
                 break
 
-        for position, obj in queue_sending.items():
+        for position, param in queue_sending.items():
+            if param == " ":
+                obj_with_position = str(position)
+                gate = " "
+            else:
+                obj_with_position = str(position) + " " + param[0]
+                gate = param[1]
             if last_pid == 255:
                 last_pid = 0
             last_pid += 1
-            display_obj = [None, 0, 1, 2, 3, 4, 5, 6, 7]
+            display_obj = [None] + [i for i in range(conf['NumberRows'])]
             if conf.get('Command', "0x05") == "0x05":
-                impuls.send_data_for_table_0x05(server_socket, conf, sended_packets, last_pid, obj, str(position),
+                impuls.send_data_for_table_0x05(server_socket, conf, sended_packets, last_pid, obj_with_position, gate,
                                                 display_obj[position], None)
                 time.sleep(0.01)
 

@@ -42,7 +42,16 @@ def sideparam(conf):
     if id_param_count:
         sideparam['NameSideparamPosition'] = id_param_count[0]
     else:
-        sideparam['NameSideparamPosition'] = "NULL"
+        logger.error(f"Дополнительный параметр хранения позиции в очереди не найден в системе")
+        exit(1)
+
+    id_param_gate = [i[1] for i in result if i[0] == f"{conf['NameSideparamGate']}"]
+    if id_param_gate:
+        sideparam['NameSideparamGate'] = id_param_gate[0]
+    else:
+        logger.error(f"Дополнительный параметр хранения номера ворот не найден в системе")
+        exit(1)
+
     return sideparam
 
 # получение данных об очереди
@@ -50,29 +59,43 @@ def queue_script(conf, sideparam):
     # Если в конфиге указано "ParamNum" = 1, это значит использование `ФИО` в качестве номера (только для личного и служебного транспорта)
     if conf["ParamNum"] == 1:
         queue_script = format_str(f"""
-        SELECT s.VALUE AS position, p.NAME AS lprnumber 
+        SELECT 
+		    MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamPosition']} THEN spv.VALUE END) AS position,
+		    MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamGate']} THEN spv.VALUE END) AS gate,
+		    p.NAME AS lprnumber 
         FROM personal p
-        JOIN sideparamvalues s ON s.OBJ_ID = p.ID
-        WHERE s.PARAM_IDX = {sideparam['NameSideparamPosition']}
-        AND p.`TYPE` = 'EMP'
-        AND s.VALUE != ''
-        AND (p.`EMP_TYPE` = 'AUTO_PERSONAL' OR p.EMP_TYPE = 'AUTO_OFFICIAL')
-        ORDER BY VALUE;
+        JOIN sideparamvalues spv ON p.id = spv.OBJ_ID
+        JOIN sideparamtypes spt ON spv.PARAM_IDX = spt.PARAM_IDX
+		WHERE spv.TABLE_ID = 0 
+		    AND p.`TYPE` = 'EMP'
+		    AND (p.`EMP_TYPE` = 'AUTO_PERSONAL' OR p.EMP_TYPE = 'AUTO_OFFICIAL')
+            AND spv.VALUE != ''
+        GROUP BY p.id
+        HAVING MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamPosition']} THEN spv.VALUE END) IS NOT NULL
+            AND MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamGate']} THEN spv.VALUE END) IS NOT NULL
+            AND p.NAME IS NOT NULL
+        ORDER BY position;
         """)
 
     # Если в конфиге указано "ParamNum" = 2, это значит гос номер хранится в доп. параметре sideparam["NameSideparamNum"].
     elif conf["ParamNum"] == 2:
         queue_script = format_str(f"""
-        SELECT 
-        MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamPosition']} THEN spv.VALUE END) AS position,
-        MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamNum']} THEN spv.VALUE END) AS lprnumber
-        FROM personal p
-        JOIN sideparamvalues spv ON p.id = spv.OBJ_ID
-        JOIN sideparamtypes spt ON spv.PARAM_IDX = spt.PARAM_IDX
-        WHERE spv.TABLE_ID = 0 AND p.EMP_TYPE= 'EMP'
-        GROUP BY p.id
-        HAVING MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamPosition']} THEN spv.VALUE END) IS NOT NULL
-        ORDER BY position;
+            SELECT 
+                MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamPosition']} THEN spv.VALUE END) AS position,
+                MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamGate']} THEN spv.VALUE END) AS gate,
+                MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamNum']} THEN spv.VALUE END) AS lprnumber
+            FROM personal p
+            JOIN sideparamvalues spv ON p.id = spv.OBJ_ID
+            JOIN sideparamtypes spt ON spv.PARAM_IDX = spt.PARAM_IDX
+            WHERE spv.TABLE_ID = 0 
+              AND p.EMP_TYPE = 'EMP'
+              AND spv.VALUE != ''
+            GROUP BY p.id
+            HAVING 
+                MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamPosition']} THEN spv.VALUE END) IS NOT NULL
+                AND MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamGate']} THEN spv.VALUE END) IS NOT NULL
+                AND MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamNum']} THEN spv.VALUE END) IS NOT NULL
+            ORDER BY position; 
         """)
 
     return queue_script.strip().replace("\n", " ")
@@ -82,9 +105,11 @@ def queue(conf, sideparam):
     response = {}
     script = queue_script(conf, sideparam)
     result = dbconnect.query(script)
+    print(f"Результат: {result}")
     logger.debug(f"result_request_DB: {result}")
     if result:
-        response = {key: value for key, value in result if value is not None}
+        response = {position: [lprnumber, gate] for position, gate, lprnumber in result}
 
     return response
+
 
