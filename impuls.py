@@ -348,16 +348,18 @@ if __name__ == "__main__":
         print("Тест связи с табло")
         test_connection(server_socket, conf)
 
-        print("Тест вывода текста в 1 строку")
-        for i in range(conf.get("NumberRows", 8)):
+        for i in range(1, conf.get("NumberRows", 8)):
             if i == 0:
-                text = '1 aaa1234'
+                print(f"Тест вывода текста в {i} строку")
+                position = '1'
+                number = 'AABBCC1'
+                text = position + " " + number
                 gate = str(i + 1)
             else:
                 text = ''
                 gate = ''
-            num_disp = i
-            pid = i+1
+            num_disp = i-1
+            pid = i
             send_data_for_table_0x05(server_socket, conf, sended_packets, pid, text, gate, num_disp, None)
 
     except (OSError, OverflowError):
