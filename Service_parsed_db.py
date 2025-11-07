@@ -106,7 +106,6 @@ def queue(conf, sideparam):
     script = queue_script(conf, sideparam)
     result = dbconnect.query(script)
     print(f"Результат: {result}")
-    logger.debug(f"result_request_DB: {result}")
     if result:
         response = {position: [lprnumber, gate] for position, gate, lprnumber in result}
 

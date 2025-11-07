@@ -13,6 +13,7 @@ import impuls
 from logging_config import setup_logging
 from parsing_cfg import parse_cfg
 
+
 # Парсим аргумент --launcher-dir
 parser = argparse.ArgumentParser()
 parser.add_argument('--launcher-dir', type=str, help='Путь к директории, откуда запущен launcher')
@@ -135,10 +136,10 @@ try:
                 logger.info(f"Ворота указанные для номера {lprnumber_queue} имеют значние {gate_queue}, что меньше 1. Игнорируем.")
                 сontinue
             # проверка длины номера
-            elif len(lprnumber_queue) > conf.get('CountSymbolString') - 3:
-                logger.info(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 2]}'")
-                print(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 2]}'")
-                pre_queue_sending[int(position_queue)] = [lprnumber_queue[:conf.get('CountSymbolString') - 3], gate_queue]
+            elif len(lprnumber_queue) > conf.get('CountSymbolString') - 5:
+                logger.info(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 5]}'")
+                print(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 5]}'")
+                pre_queue_sending[int(position_queue)] = [lprnumber_queue[:conf.get('CountSymbolString') - 5], gate_queue]
             else:
                 # иначе добавляем в очередь отправки
                 pre_queue_sending[int(position_queue)] = [lprnumber_queue, gate_queue]
