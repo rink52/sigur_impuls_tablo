@@ -281,8 +281,6 @@ def send_data_for_table_0x05(socket, conf: dict, sended_packets: dict, pid: int,
 
         # Форматирование текста и позиции до CountSymbolString знаков, с учетом что позиция всегда 2-х значная.
         count_symbol_string = conf.get("CountSymbolString")
-        if gate.isdigit():
-            gate = gate.zfill(2)
         formatted_text = f"{text.ljust(count_symbol_string-2)}{gate}"
 
         # Определение цвета текста в зависимости от строки

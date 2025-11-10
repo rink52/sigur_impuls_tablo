@@ -119,23 +119,20 @@ try:
             lprnumber_queue, gate_queue = value_queue
             # проверим, что позиция и ворота указаны числом
             if not position_queue.isdigit():
-                logger.error(f"Позиция в очереди для номера {lprnumber_queue} не число и имеет значение {position_queue}. Игнорируем.")
-                continue
-            elif not gate_queue.isdigit():
-                logger.error(f"Ворота указанные для номера {lprnumber_queue} не число и имеет значение {gate_queue}. Игнорируем.")
+                logger.error(f"Позиция в очереди для номера '{lprnumber_queue}' не число и имеет значение '{position_queue}'. Игнорируем.")
                 continue
             # проверим, что позиция в очереди не больше количества места на табло
             elif int(position_queue) > conf['NumberRows']:
-                logger.info(f"Позиция в очереди для номера {lprnumber_queue} имеет значение {position_queue}, что больше {conf['NumberRows']}. Игнорируем.")
+                logger.info(f"Позиция в очереди для номера '{lprnumber_queue}' имеет значение '{position_queue}', что больше {conf['NumberRows']}. Игнорируем.")
                 continue
             # проверка на отрицательные значения
             elif int(position_queue) < 1:
-                logger.info(f"Позиция в очереди для номера {lprnumber_queue} имеет значение {position_queue}, что меньше 1. Игнорируем.")
+                logger.info(f"Позиция в очереди для номера '{lprnumber_queue}' имеет значение '{position_queue}', что меньше 1. Игнорируем.")
                 continue
-            elif int(gate_queue) < 1:
-                logger.info(f"Ворота указанные для номера {lprnumber_queue} имеют значние {gate_queue}, что меньше 1. Игнорируем.")
-                сontinue
-            # проверка длины номера
+            # проверка длины ворот и номера
+            elif len(gate_queue) != 2:
+                logger.info(f"Ворота указанные для номера '{lprnumber_queue}' имеют значние '{gate_queue}', длина значения не равна 2 символам. Игнорируем.")
+                continue
             elif len(lprnumber_queue) > conf.get('CountSymbolString') - 5:
                 logger.info(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 5]}'")
                 print(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 5]}'")
