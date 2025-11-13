@@ -67,6 +67,7 @@ def queue_script(conf, sideparam):
         JOIN sideparamvalues spv ON p.id = spv.OBJ_ID
         JOIN sideparamtypes spt ON spv.PARAM_IDX = spt.PARAM_IDX
 		WHERE spv.TABLE_ID = 0 
+		    AND p.`STATUS`='AVAILABLE'
 		    AND p.`TYPE` = 'EMP'
 		    AND (p.`EMP_TYPE` = 'AUTO_PERSONAL' OR p.EMP_TYPE = 'AUTO_OFFICIAL')
             AND spv.VALUE != ''
@@ -88,8 +89,9 @@ def queue_script(conf, sideparam):
             JOIN sideparamvalues spv ON p.id = spv.OBJ_ID
             JOIN sideparamtypes spt ON spv.PARAM_IDX = spt.PARAM_IDX
             WHERE spv.TABLE_ID = 0 
-              AND p.EMP_TYPE = 'EMP'
-              AND spv.VALUE != ''
+                AND p.`STATUS`='AVAILABLE'
+                AND p.EMP_TYPE = 'EMP'
+                AND spv.VALUE != ''
             GROUP BY p.id
             HAVING 
                 MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamPosition']} THEN spv.VALUE END) IS NOT NULL
