@@ -214,7 +214,11 @@ try:
     main(server_socket, conf)
 
     while True:
-        print("Keep Alive")
+        try:
+            print("Keep Alive")
+        except (OSError, ValueError, AttributeError):
+            logger.error(f"Ошибка при отправке keep alive пакета. Ошибка: {traceback.format_exc()}")
+            exit(1)
         # Проверяем необходимость запуска функции main
         schedule.run_pending()
 
