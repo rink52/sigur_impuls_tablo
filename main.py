@@ -217,8 +217,11 @@ try:
         try:
             print("Keep Alive")
         except (OSError, ValueError, AttributeError):
-            logger.error(f"Ошибка при отправке keep alive пакета. Ошибка: {traceback.format_exc()}")
-            exit(1)
+            if conf.get('Debug', 0) == 1:
+                logger.warning(f"Не удалось отправить Keep Alive: {e}\n{traceback.format_exc()}")
+            else:
+                logger.warning(f"Не удалось отправить Keep Alive: {e}")
+
         # Проверяем необходимость запуска функции main
         schedule.run_pending()
 
