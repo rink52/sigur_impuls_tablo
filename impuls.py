@@ -131,9 +131,11 @@ def check_incoming_packet(socket=None, sended_packets=None):
     logger.debug(f"Sended_packets: {sended_packets}")
     if sended_packets is not None:
         if sended_packets.get(result[0]) and result[3] == 0:
-            logger.debug(f"Получили ответ. Удаляем пакет {sended_packets.get(result[0])} из sended_packets.")
+            logger.debug(f"Получили ответ. Удаляем пакет c PID: {result[0]} из sended_packets.")
             del sended_packets[result[0]]
             approve_packet = True
+    if sended_packets == {}:
+        logger.debug(f"Sended_packets пуст")
     return result, approve_packet
 
 
