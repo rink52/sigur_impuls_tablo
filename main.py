@@ -3,7 +3,9 @@ import logging
 import signal
 import socket
 import time
+import traceback
 from os import path
+from datetime import datetime
 
 import psutil
 import schedule
@@ -27,6 +29,9 @@ else:
     config_path = path.join(path.dirname(path.abspath(__file__)), "impuls.cfg")
 
 if not path.exists(config_path):
+    with open(f"startup_error.log", 'a', encoding='utf-8') as f:
+        f.write(
+            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - main - INIT - Ошибка: файл конфигурации '{config_path}' не найден!\n")
     print(f"Ошибка: файл конфигурации {config_path} не найден!")
     exit(1)
 
@@ -113,7 +118,7 @@ try:
         # получаем очередь отправки из БД
         # queue = {'1': ['12VAAA14', '9'], '3': ['AAA1234', '5'], '7': ['hhfff', '4']}
         queue = Service_parsed_db.queue(conf, sideparam)
-        logger.debug("queue:", queue)
+        logger.debug(f"Предварительная очередь отправки на табло: {queue}")
         # проверяем значения на соответствие требованиям отправки
         for position_queue, value_queue in queue.items():
             lprnumber_queue, gate_queue = value_queue
@@ -129,11 +134,14 @@ try:
             elif int(position_queue) < 1:
                 logger.info(f"Позиция в очереди для номера '{lprnumber_queue}' имеет значение '{position_queue}', что меньше 1. Игнорируем.")
                 continue
-            # проверка длины ворот и номера
-            elif len(gate_queue) != 2:
-                logger.info(f"Ворота указанные для номера '{lprnumber_queue}' имеют значние '{gate_queue}', длина значения не равна 2 символам. Игнорируем.")
+            # проверка длины номера ворот
+            elif len(gate_queue) > 2 or len(gate_queue) == 0:
+                logger.info(f"Ворота указанные для номера '{lprnumber_queue}' имеют значние '{gate_queue}', длина значения не ровна 2 символа. Игнорируем.")
                 continue
-            elif len(lprnumber_queue) > conf.get('CountSymbolString') - 5:
+            if len(gate_queue) == 1:
+                gate_queue = " " + gate_queue
+            # проверка длины номера
+            if len(lprnumber_queue) > conf.get('CountSymbolString') - 5:
                 logger.info(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 5]}'")
                 print(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 5]}'")
                 pre_queue_sending[int(position_queue)] = [lprnumber_queue[:conf.get('CountSymbolString') - 5], gate_queue]
@@ -143,7 +151,9 @@ try:
 
             if len(pre_queue_sending) == conf['NumberRows']:
                 break
+
         # теперь у нас есть предварительная очередь отправки pre_queue_sending
+        logger.debug(f"Валидная очередь отправки на табло: {pre_queue_sending}")
 
         # добавим пустые строки (для очистки не задействованных строк табло) и сформируем готовую очередь отправки
         for index in range(1, conf['NumberRows'] + 1):
@@ -263,10 +273,8 @@ try:
 
 except SystemExit:
     logger.info("Выполнение программы остановлено")
-except OSError as e:
-    logger.error(e)
 except Exception as e:
-    logger.error(f"Неожиданная ошибка: {e}")
+    logger.error(f"Ошибка: {e}\n{traceback.format_exc()}")
 
 finally:
     if server_socket:
