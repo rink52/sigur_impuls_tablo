@@ -70,10 +70,9 @@ def queue_script(conf, sideparam):
 		    AND p.`STATUS`='AVAILABLE'
 		    AND p.`TYPE` = 'EMP'
 		    AND (p.`EMP_TYPE` = 'AUTO_PERSONAL' OR p.EMP_TYPE = 'AUTO_OFFICIAL')
-            AND spv.VALUE != ''
         GROUP BY p.id
         HAVING MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamPosition']} THEN spv.VALUE END) IS NOT NULL
-            AND MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamGate']} THEN spv.VALUE END) IS NOT NULL
+        AND MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamPosition']} THEN spv.VALUE END) != ''
             AND p.NAME IS NOT NULL
         ORDER BY position;
         """)
@@ -91,12 +90,12 @@ def queue_script(conf, sideparam):
             WHERE spv.TABLE_ID = 0 
                 AND p.`STATUS`='AVAILABLE'
                 AND p.EMP_TYPE = 'EMP'
-                AND spv.VALUE != ''
             GROUP BY p.id
             HAVING 
                 MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamPosition']} THEN spv.VALUE END) IS NOT NULL
-                AND MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamGate']} THEN spv.VALUE END) IS NOT NULL
+                AND MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamPosition']} THEN spv.VALUE END) != ''
                 AND MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamNum']} THEN spv.VALUE END) IS NOT NULL
+                AND MAX(CASE WHEN spv.PARAM_IDX = {sideparam['NameSideparamNum']} THEN spv.VALUE END) != ''
             ORDER BY position; 
         """)
 
@@ -107,7 +106,7 @@ def queue(conf, sideparam):
     response = {}
     script = queue_script(conf, sideparam)
     result = dbconnect.query(script)
-    print(f"Результат: {result}")
+    print(f"Из БД получен результат: {result}")
     if result:
         response = {position: [lprnumber, gate] for position, gate, lprnumber in result}
 

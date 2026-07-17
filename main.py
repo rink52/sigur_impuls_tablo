@@ -122,7 +122,9 @@ try:
         # проверяем значения на соответствие требованиям отправки
         for position_queue, value_queue in queue.items():
             lprnumber_queue, gate_queue = value_queue
-            # проверим, что позиция и ворота указаны числом
+            logger.debug(f"Обрабатываем позицию: {position_queue}")
+            logger.debug(f"position_queue: '{position_queue}', lprnumber_queuqe: '{lprnumber_queue}', gate_queue: '{gate_queue}'")
+            # проверим, что позиция указана числом
             if not position_queue.isdigit():
                 logger.error(f"Позиция в очереди для номера '{lprnumber_queue}' не число и имеет значение '{position_queue}'. Игнорируем.")
                 continue
@@ -135,15 +137,18 @@ try:
                 logger.info(f"Позиция в очереди для номера '{lprnumber_queue}' имеет значение '{position_queue}', что меньше 1. Игнорируем.")
                 continue
             # проверка длины номера ворот
-            elif len(gate_queue) > 2 or len(gate_queue) == 0:
-                logger.info(f"Ворота указанные для номера '{lprnumber_queue}' имеют значние '{gate_queue}', длина значения не ровна 2 символа. Игнорируем.")
+            if not gate_queue or gate_queue == "":
+                gate_queue = "  "
+                logger.info(f"Значение ворот для номера '{lprnumber_queue}' не указано. Используем значение по умолчанию '  '.")
+            elif len(gate_queue) > 2:
+                logger.info(f"Ворота указанные для номера '{lprnumber_queue}' имеют значние '{gate_queue}', длина значения больше 2-х символов. Игнорируем.")
                 continue
-            if len(gate_queue) == 1:
+            elif len(gate_queue) == 1:
                 gate_queue = " " + gate_queue
             # проверка длины номера
             if len(lprnumber_queue) > conf.get('CountSymbolString') - 5:
                 logger.info(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 5]}'")
-                print(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 5]}'")
+                #print(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 5]}'")
                 pre_queue_sending[int(position_queue)] = [lprnumber_queue[:conf.get('CountSymbolString') - 5], gate_queue]
             else:
                 # иначе добавляем в очередь отправки
@@ -151,7 +156,6 @@ try:
 
             if len(pre_queue_sending) == conf['NumberRows']:
                 break
-
         # теперь у нас есть предварительная очередь отправки pre_queue_sending
         logger.debug(f"Валидная очередь отправки на табло: {pre_queue_sending}")
 
