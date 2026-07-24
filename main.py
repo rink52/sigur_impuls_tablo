@@ -1,64 +1,130 @@
 import argparse
-import logging
+import functools
+import os
 import signal
 import socket
+import sys
 import time
 import traceback
-from os import path
 from datetime import datetime
-
-import psutil
-import schedule
-
-import Service_parsed_db
-import impuls
-from logging_config import setup_logging
-from parsing_cfg import parse_cfg
+from os import path
 
 
-# Парсим аргумент --launcher-dir
-parser = argparse.ArgumentParser()
-parser.add_argument('--launcher-dir', type=str, help='Путь к директории, откуда запущен launcher')
-args = parser.parse_args()
+# --- ЗАЩИТА ОТ OSERROR [ERRNO 22] В WINDOWS ---
+class SafeStream:
+    def __init__(self, target):
+        self.target = target
 
-# Определяем, где искать config.cfg
-if args.launcher_dir and path.isdir(args.launcher_dir):
-    config_path = path.join(args.launcher_dir, "impuls.cfg")
-else:
-    # Fallback: если аргумент не передан — ищем рядом с main.py (для отладки)
-    config_path = path.join(path.dirname(path.abspath(__file__)), "impuls.cfg")
+    def write(self, s):
+        if not self.target:
+            return
+        try:
+            chunk_size = 1024
+            for i in range(0, len(s), chunk_size):
+                self.target.write(s[i:i + chunk_size])
+            self.target.flush()
+        except Exception:
+            pass
 
-if not path.exists(config_path):
-    with open(f"startup_error.log", 'a', encoding='utf-8') as f:
-        f.write(
-            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - main - INIT - Ошибка: файл конфигурации '{config_path}' не найден!\n")
-    print(f"Ошибка: файл конфигурации {config_path} не найден!")
-    exit(1)
+    def flush(self):
+        if not self.target:
+            return
+        try:
+            self.target.flush()
+        except Exception:
+            pass
 
-# Проверка компонентов
-library_files = ('impuls.py',
-                 'logging_config.py',
-                 'main.py',
-                 'maria.py',
-                 'parsing_cfg.py',
-                 'Service_parsed_db.py'
-                 )
+    def __getattr__(self, name):
+        if self.target:
+            return getattr(self.target, name)
+        raise AttributeError(f"'SafeStream' object has no attribute '{name}'")
 
-server_socket = None
 
-if not all(path.exists(path.join(path.dirname(path.abspath(__file__)), name)) for name in library_files):
-    exit("Ошибка: Отсутствуют необходимые файлы интеграции")
+sys.stdout = SafeStream(sys.stdout)
+sys.stderr = SafeStream(sys.stderr)
+
+print = functools.partial(print, flush=True)
 
 # Инициализация компонентов
+# 1. Сначала определяем пути и аргументы
+parser = argparse.ArgumentParser()
+parser.add_argument('--launcher-dir', type=str, help='Путь к директории, откуда запущен launcher')
+parser.add_argument('-debug', '--debug', action='store_true', help='Флаг отладки')
+args, unknown = parser.parse_known_args()
 
+base_path = path.dirname(path.abspath(__file__))
+launcher_dir = args.launcher_dir if args.launcher_dir and path.isdir(args.launcher_dir) else base_path
+
+# 2. Настраиваем логирование старта
+logs_dir = path.join(launcher_dir, "logs")
+os.makedirs(logs_dir, exist_ok=True)
+STARTUP_LOG_FILE = path.join(logs_dir, "main_startup.log")
+
+
+def log_main_debug(msg):
+    try:
+        with open(STARTUP_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now()}] {msg}\n")
+    except Exception:
+        pass
+
+
+def delete_startup_log():
+    if path.exists(STARTUP_LOG_FILE):
+        try:
+            os.remove(STARTUP_LOG_FILE)
+        except Exception:
+            pass
+
+
+log_main_debug(f"{'=' * 30}\n=== main.py запущен ===")
+
+# 3. Проверка библиотек
+library_files = (
+    'impuls.py',
+    'logging_config.py',
+    'maria.py',
+    'parsing_cfg.py',
+    'Service_parsed_db.py'
+)
+
+missing_libs = [name for name in library_files if not path.exists(path.join(base_path, name))]
+if missing_libs:
+    msg = f"Ошибка: Отсутствуют необходимые файлы интеграции: {', '.join(missing_libs)}"
+    log_main_debug(msg)
+    sys.exit(msg)
+
+# 4. Импорт компонентов
+try:
+    import psutil
+    import schedule
+    import Service_parsed_db
+    import impuls
+    import logging
+    from logging_config import setup_logging
+    from parsing_cfg import parse_cfg
+
+    log_main_debug("Все базовые импорты выполнены успешно.")
+except Exception as e:
+    log_main_debug(f"ОШИБКА ИМПОРТА: {e}\n{traceback.format_exc()}")
+    sys.exit(1)
+
+# 5. Проверка конфига
+config_path = path.join(launcher_dir, "impuls.cfg")
+if not path.exists(config_path):
+    log_main_debug(f"ОШИБКА: Файл конфигурации '{config_path}' НЕ НАЙДЕН!")
+    sys.exit(1)
 # Чтение конфигурации
 conf: dict = parse_cfg(config_path)
+server_socket = None
+
 
 def handler(signum, frame):
     logger.info("Получен сигнал принудительного закрытия. Завершаем работу.")
-    exit(0)
+    sys.exit(0)
 
-# Инициализация логирования
+
+# Инициализация логирования приложения
 try:
     setup_logging(maxsize=int(conf.get("LenLog", 100)), countlogs=conf.get('Count_logs_file', 2))
     logger = logging.getLogger('main')
@@ -75,9 +141,12 @@ try:
     signal.signal(signal.SIGINT, handler)
 
     logger.info(f"Сервис запущен")
+    log_main_debug("Логирование успешно настроено.")
 except Exception as e:
-    print("Ошибка конфигурации логирования. Ошибка:", e)
-    exit(1)
+    msg = f"Ошибка конфигурации логирования: {e}\n{traceback.format_exc()}"
+    log_main_debug(msg)
+    sys.stderr.write(msg + "\n")
+    sys.exit(1)
 
 
 def find_process_using_port(port):
@@ -88,14 +157,17 @@ def find_process_using_port(port):
         for conn in psutil.net_connections():
             if conn.laddr.port == port:
                 pid = conn.pid
-                process = psutil.Process(pid)
-                print(f"Порт {port} занят процессом: PID: {pid}, Имя процесса: {process.name()}, Статус: {conn.status}, Локальный адрес: {conn.laddr.ip}")
-                logger.warning(f"Порт {port} занят процессом: PID: {pid}, Имя процесса: {process.name()}, Статус: {conn.status}, Локальный адрес: {conn.laddr.ip}")
-    return None
+                try:
+                    process = psutil.Process(pid)
+                    print(
+                        f"Порт {port} занят процессом: PID: {pid}, Имя процесса: {process.name()}, Статус: {conn.status}, Локальный адрес: {conn.laddr.ip}")
+                    logger.warning(
+                        f"Порт {port} занят процессом: PID: {pid}, Имя процесса: {process.name()}, Статус: {conn.status}, Локальный адрес: {conn.laddr.ip}")
+                except Exception:
+                    pass
 
 
-
-# Основной блок
+# --- ОСНОВНОЙ БЛОК ---
 try:
     sended_packets: dict = {}  # Отправленные пакеты на которые еще не вернулся ответ ОК
     last_pid: int = 0  # последний использованный PID пакета (0 - 254)
@@ -104,7 +176,7 @@ try:
     sideparam = Service_parsed_db.sideparam(conf)
 
 
-    def main(server_socket, conf: dict):
+    def main_task(server_socket, conf: dict):
         global sended_packets
         global last_pid
 
@@ -126,20 +198,15 @@ try:
             logger.debug(f"position_queue: '{position_queue}', lprnumber_queuqe: '{lprnumber_queue}', gate_queue: '{gate_queue}'")
             # проверим, что позиция указана числом
             if not position_queue.isdigit():
-                logger.error(f"Позиция в очереди для номера '{lprnumber_queue}' не число и имеет значение '{position_queue}'. Игнорируем.")
                 continue
             # проверим, что позиция в очереди не больше количества места на табло
-            elif int(position_queue) > conf['NumberRows']:
+            elif int(position_queue) > conf['NumberRows'] or int(position_queue) < 1:
                 logger.info(f"Позиция в очереди для номера '{lprnumber_queue}' имеет значение '{position_queue}', что больше {conf['NumberRows']}. Игнорируем.")
-                continue
-            # проверка на отрицательные значения
-            elif int(position_queue) < 1:
-                logger.info(f"Позиция в очереди для номера '{lprnumber_queue}' имеет значение '{position_queue}', что меньше 1. Игнорируем.")
                 continue
             # проверка длины номера ворот
             if not gate_queue or gate_queue == "":
                 gate_queue = "  "
-                logger.info(f"Значение ворот для номера '{lprnumber_queue}' не указано. Используем значение по умолчанию '  '.")
+                logger.debug(f"Значение ворот для номера '{lprnumber_queue}' не указано. Используем значение по умолчанию '  '.")
             elif len(gate_queue) > 2:
                 logger.info(f"Ворота указанные для номера '{lprnumber_queue}' имеют значние '{gate_queue}', длина значения больше 2-х символов. Игнорируем.")
                 continue
@@ -148,14 +215,15 @@ try:
             # проверка длины номера
             if len(lprnumber_queue) > conf.get('CountSymbolString') - 5:
                 logger.info(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 5]}'")
-                #print(f"Длина номера превышает длину строки. Номер '{lprnumber_queue}' будет обрезан до '{lprnumber_queue[:conf.get('CountSymbolString') - 5]}'")
-                pre_queue_sending[int(position_queue)] = [lprnumber_queue[:conf.get('CountSymbolString') - 5], gate_queue]
+                pre_queue_sending[int(position_queue)] = [lprnumber_queue[:conf.get('CountSymbolString') - 5],
+                                                          gate_queue]
             else:
                 # иначе добавляем в очередь отправки
                 pre_queue_sending[int(position_queue)] = [lprnumber_queue, gate_queue]
 
             if len(pre_queue_sending) == conf['NumberRows']:
                 break
+
         # теперь у нас есть предварительная очередь отправки pre_queue_sending
         logger.debug(f"Валидная очередь отправки на табло: {pre_queue_sending}")
 
@@ -165,6 +233,7 @@ try:
                 queue_sending[index] = pre_queue_sending.get(index)
             else:
                 queue_sending[index] = " "
+
         while True:
             if impuls.test_connection(server_socket, conf):
                 break
@@ -176,32 +245,34 @@ try:
             else:
                 obj_with_position = str(position) + " " + param[0]
                 gate = param[1]
+
             if last_pid == 255:
                 last_pid = 0
             last_pid += 1
             display_obj = [None] + [i for i in range(conf['NumberRows'])]
+
             if conf.get('Command', "0x05") == "0x05":
                 impuls.send_data_for_table_0x05(server_socket, conf, sended_packets, last_pid, obj_with_position, gate,
                                                 display_obj[position], None)
                 time.sleep(0.01)
 
 
-    # Открываем сокет
+    # Открытие сокета с защитой
     try:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         server_socket.bind(('0.0.0.0', conf.get('ServicePort', 12345)))
         server_socket.setblocking(False)  # Неблокирующий режим
         logger.debug(f"Сокет открыт на порту: {conf.get('ServicePort', 12345)}")
-    except (OSError, OverflowError):
+    except (OSError, OverflowError) as e:
         # Если порт занят, то проверяем кем
         find_process_using_port(conf.get('ServicePort', 12345))
-        exit("Ошибка при открытии порта связи.")
+        logger.error(f"Ошибка при открытии порта связи: {e}")
+        sys.exit(1)
 
     # первичная настройка табло
     # проверка связи с табло, ждем явного ответа
     while True:
-        if impuls.test_connection(server_socket, conf):
-            break
+        if impuls.test_connection(server_socket, conf): break
 
     # настраиваем яркость
     impuls.set_bright(server_socket, conf)
@@ -209,18 +280,20 @@ try:
     if conf.get('TimeSync', 0) == 1:
         impuls.time_set(server_socket, conf)
 
-
     # Инициализируем планировщик
-    job = schedule.every(conf.get("Period", 300)).seconds.do(main, server_socket, conf)
+    job = schedule.every(conf.get("Period", 300)).seconds.do(main_task, server_socket, conf)
 
     # превентивно запускаем main() для формирования первичной очереди,
     # так как планировщик запустит функцию только по истечению периода.
-    main(server_socket, conf)
+    main_task(server_socket, conf)
+
+    log_main_debug("Инициализация успешно завершена. Запуск основного цикла.")
+    delete_startup_log()
 
     while True:
         try:
             print("Keep Alive")
-        except (OSError, ValueError, AttributeError):
+        except Exception as e:
             if conf.get('Debug', 0) == 1:
                 logger.warning(f"Не удалось отправить Keep Alive: {e}\n{traceback.format_exc()}")
             else:
@@ -238,7 +311,6 @@ try:
         if conf.get('Debug', 0) == 1:
             print(f"До следующего запуска: {time_remaining:.0f} секунд")
 
-
         check = False
         while True:
             time.sleep(0.5)
@@ -248,12 +320,12 @@ try:
             # Проверяем есть ли пакеты на которые не получили ответов
             elif sended_packets:
                 try:
-                   impuls.check_incoming_packet(server_socket, sended_packets)
-                   continue
+                    impuls.check_incoming_packet(server_socket, sended_packets)
+                    continue
                 except BlockingIOError:
                     # если в буфере пакетов нет, то сначала ждем возможной доставки и повторно проверяем буфер,
                     # а затем отправляем пакеты заново.
-                    if check == False:
+                    if not check:
                         check = True
                         time.sleep(0.5)
                         continue
@@ -267,7 +339,9 @@ try:
                         if last_pid == 255:
                             last_pid = 0
                         last_pid += 1
-                        impuls.send_data_for_table_0x05(server_socket, conf, sended_packets, last_pid, param_pack.get('text'), "NULL", param_pack.get('display'), data_pack)
+                        impuls.send_data_for_table_0x05(server_socket, conf, sended_packets, last_pid,
+                                                        param_pack.get('text'), "NULL", param_pack.get('display'),
+                                                        data_pack)
                         time.sleep(0.01)
                     sended_packets_copy.clear()
                     time.sleep(0.5)
@@ -281,14 +355,14 @@ try:
                         break
             break
 
-
 except SystemExit:
-    logger.info("Выполнение программы остановлено")
+    logger.info("Выполнение программы остановлено штатно.")
+    sys.exit(0)
 except Exception as e:
-    logger.error(f"Ошибка: {e}\n{traceback.format_exc()}")
-
+    logger.error(f"Критическая ошибка: {e}\n{traceback.format_exc()}")
+    sys.stderr.write(msg + "\n")
+    sys.exit(1)
 finally:
     if server_socket:
         server_socket.close()
     logger.info("Сервис остановлен")
-    exit("Сервис остановлен")
